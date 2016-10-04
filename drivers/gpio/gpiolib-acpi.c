@@ -57,6 +57,35 @@ static int acpi_gpiochip_find(struct gpio_chip *gc, void *data)
 	return ACPI_HANDLE(gc->parent) == data;
 }
 
+/**
+ * acpi_get_gpio() - Translate ACPI GPIO pin to GPIO number usable with GPIO API
+ * @path:	ACPI GPIO controller full path name, (e.g. "\\_SB.GPO1")
+ * @pin:	ACPI GPIO pin number (0-based, controller-relative)
+ *
+ * Returns GPIO number to use with Linux generic GPIO API, or errno error value
+ */
+
+int acpi_get_gpio(char *path, int pin)
+{
+	struct gpio_chip *chip;
+	acpi_handle handle;
+	acpi_status status;
+
+	status = acpi_get_handle(NULL, path, &handle);
+	if (ACPI_FAILURE(status))
+		return -ENODEV;
+
+	chip = gpiochip_find(handle, acpi_gpiochip_find);
+	if (!chip)
+		return -ENODEV;
+
+	if (!gpio_is_valid(chip->base + pin))
+		return -EINVAL;
+
+	return chip->base + pin;
+}
+EXPORT_SYMBOL_GPL(acpi_get_gpio);
+
 #ifdef CONFIG_PINCTRL
 /**
  * acpi_gpiochip_pin_to_gpio_offset() - translates ACPI GPIO to Linux GPIO
@@ -586,6 +615,7 @@ struct gpio_desc *acpi_node_get_gpiod(struct fwnode_handle *fwnode,
 	ret = acpi_gpio_resource_lookup(&lookup, info);
 	return ret ? ERR_PTR(ret) : lookup.desc;
 }
+EXPORT_SYMBOL_GPL(acpi_get_gpiod_by_index);
 
 /**
  * acpi_dev_gpio_irq_get() - Find GpioInt and translate it to Linux IRQ number

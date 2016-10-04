@@ -110,6 +110,9 @@ static inline bool timespec_valid_strict(const struct timespec *ts)
 	return true;
 }
 
+void get_xtime_and_monotonic_and_sleep_offset(struct timespec *xtim,
+				struct timespec *wtom, struct timespec *sleep);
+#define do_posix_clock_monotonic_gettime(ts) ktime_get_ts(ts)
 static inline bool timeval_valid(const struct timeval *tv)
 {
 	/* Dates before 1970 are bogus */

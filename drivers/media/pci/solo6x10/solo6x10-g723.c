@@ -361,7 +361,7 @@ int solo_g723_init(struct solo_dev *solo_dev)
 	/* Allows for easier mapping between video and audio */
 	sprintf(name, "Softlogic%d", solo_dev->vfd->num);
 
-	ret = snd_card_new(&solo_dev->pdev->dev,
+	ret = snd_card_create(
 			   SNDRV_DEFAULT_IDX1, name, THIS_MODULE, 0,
 			   &solo_dev->snd_card);
 	if (ret < 0)

@@ -1160,6 +1160,26 @@ void hrtimer_init(struct hrtimer *timer, clockid_t clock_id,
 }
 EXPORT_SYMBOL_GPL(hrtimer_init);
 
+/**
+ * hrtimer_get_res - get the timer resolution for a clock
+ * @which_clock: which clock to query
+ * @tp:		 pointer to timespec variable to store the resolution
+ *
+ * Store the resolution of the clock selected by @which_clock in the
+ * variable pointed to by @tp.
+ */
+int hrtimer_get_res(const clockid_t which_clock, struct timespec *tp)
+{
+	struct hrtimer_cpu_base *cpu_base;
+	int base = hrtimer_clockid_to_base(which_clock);
+
+	cpu_base = &__raw_get_cpu_var(hrtimer_bases);
+	*tp = ktime_to_timespec(cpu_base->clock_base[base].resolution);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(hrtimer_get_res);
+
 /*
  * A timer is active, when it is enqueued into the rbtree or the
  * callback function is running or it's in the state of being migrated
@@ -1614,6 +1634,24 @@ static void init_hrtimers_cpu(int cpu)
 	hrtimer_init_hres(cpu_base);
 }
 
+/*
+ * Functions related to boot-time initialization:
+ */
+int hrtimers_prepare_cpu(unsigned int cpu)
+{
+	struct hrtimer_cpu_base *cpu_base = &per_cpu(hrtimer_bases, cpu);
+	int i;
+
+	for (i = 0; i < HRTIMER_MAX_CLOCK_BASES; i++) {
+		cpu_base->clock_base[i].cpu_base = cpu_base;
+		timerqueue_init_head(&cpu_base->clock_base[i].active);
+	}
+
+	cpu_base->cpu = cpu;
+	hrtimer_init_hres(cpu_base);
+	return 0;
+}
+
 #ifdef CONFIG_HOTPLUG_CPU
 
 static void migrate_hrtimer_list(struct hrtimer_clock_base *old_base,
@@ -1675,6 +1713,38 @@ static void migrate_hrtimers(int scpu)
 	/* Check, if we got expired work to do */
 	__hrtimer_peek_ahead_timers();
 	local_irq_enable();
+}
+
+int hrtimers_dead_cpu(unsigned int scpu)
+{
+	struct hrtimer_cpu_base *old_base, *new_base;
+	int i;
+
+	BUG_ON(cpu_online(scpu));
+	tick_cancel_sched_timer(scpu);
+
+	local_irq_disable();
+	old_base = &per_cpu(hrtimer_bases, scpu);
+	new_base = this_cpu_ptr(&hrtimer_bases);
+	/*
+	 * The caller is globally serialized and nobody else
+	 * takes two locks at once, deadlock is not possible.
+	 */
+	raw_spin_lock(&new_base->lock);
+	raw_spin_lock_nested(&old_base->lock, SINGLE_DEPTH_NESTING);
+
+	for (i = 0; i < HRTIMER_MAX_CLOCK_BASES; i++) {
+		migrate_hrtimer_list(&old_base->clock_base[i],
+				     &new_base->clock_base[i]);
+	}
+
+	raw_spin_unlock(&old_base->lock);
+	raw_spin_unlock(&new_base->lock);
+
+	/* Check, if we got expired work to do */
+	__hrtimer_peek_ahead_timers();
+	local_irq_enable();
+	return 0;
 }
 
 #endif /* CONFIG_HOTPLUG_CPU */

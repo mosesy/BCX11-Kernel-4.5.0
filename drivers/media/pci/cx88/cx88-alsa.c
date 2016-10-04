@@ -948,8 +948,8 @@ static int cx88_audio_initdev(struct pci_dev *pci,
 		return (-ENOENT);
 	}
 
-	err = snd_card_new(&pci->dev, index[devno], id[devno], THIS_MODULE,
-			   sizeof(snd_cx88_card_t), &card);
+	err = snd_card_create(index[devno], id[devno], THIS_MODULE,
+			      sizeof(snd_cx88_card_t), &card);
 	if (err < 0)
 		return err;
 

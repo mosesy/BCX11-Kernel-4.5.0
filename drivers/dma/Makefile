@@ -7,7 +7,7 @@ obj-$(CONFIG_DMA_ENGINE) += dmaengine.o
 obj-$(CONFIG_DMA_VIRTUAL_CHANNELS) += virt-dma.o
 obj-$(CONFIG_DMA_ACPI) += acpi-dma.o
 obj-$(CONFIG_DMA_OF) += of-dma.o
-
+obj-$(CONFIG_INTEL_MID_DMAC) += intel_mid_dma.o intel_mid_dma_acpi.o
 #dmatest
 obj-$(CONFIG_DMATEST) += dmatest.o
 

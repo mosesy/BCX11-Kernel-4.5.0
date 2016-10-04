@@ -165,7 +165,7 @@ static void saa7134_irq_alsa_done(struct saa7134_dev *dev,
 			dev->dmasound.read_count,
 			dev->dmasound.bufsize, dev->dmasound.blocks);
 		spin_unlock(&dev->slock);
-		snd_pcm_stop_xrun(dev->dmasound.substream);
+		//snd_pcm_stop_xrun(dev->dmasound.substream);
 		return;
 	}
 
@@ -1139,8 +1139,8 @@ static int alsa_card_saa7134_create(struct saa7134_dev *dev, int devnum)
 	if (!enable[devnum])
 		return -ENODEV;
 
-	err = snd_card_new(&dev->pci->dev, index[devnum], id[devnum],
-			   THIS_MODULE, sizeof(snd_card_saa7134_t), &card);
+	err = snd_card_create(index[devnum], id[devnum], THIS_MODULE,
+			      sizeof(snd_card_saa7134_t), &card);
 	if (err < 0)
 		return err;
 

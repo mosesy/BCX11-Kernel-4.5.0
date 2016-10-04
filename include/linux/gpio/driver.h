@@ -1,6 +1,7 @@
 #ifndef __LINUX_GPIO_DRIVER_H
 #define __LINUX_GPIO_DRIVER_H
 
+#include <linux/device.h>
 #include <linux/types.h>
 #include <linux/module.h>
 #include <linux/irq.h>
@@ -15,12 +16,27 @@ struct gpio_desc;
 struct of_phandle_args;
 struct device_node;
 struct seq_file;
+struct gpio_device;
 
 #ifdef CONFIG_GPIOLIB
 
 /**
+ * enum single_ended_mode - mode for single ended operation
+ * @LINE_MODE_PUSH_PULL: normal mode for a GPIO line, drive actively high/low
+ * @LINE_MODE_OPEN_DRAIN: set line to be open drain
+ * @LINE_MODE_OPEN_SOURCE: set line to be open source
+ */
+enum single_ended_mode {
+	LINE_MODE_PUSH_PULL,
+	LINE_MODE_OPEN_DRAIN,
+	LINE_MODE_OPEN_SOURCE,
+};
+
+/**
  * struct gpio_chip - abstract a GPIO controller
- * @label: for diagnostics
+ * @label: a functional name for the GPIO device, such as a part
+ *	number or the name of the SoC IP-block implementing it.
+ * @gpiodev: the internal state holder, opaque struct
  * @parent: optional parent device providing the GPIOs
  * @cdev: class device used by sysfs interface (may be NULL)
  * @owner: helps prevent removal of modules exporting active GPIOs
@@ -38,7 +54,15 @@ struct seq_file;
  * @set: assigns output value for signal "offset"
  * @set_multiple: assigns output values for multiple signals defined by "mask"
  * @set_debounce: optional hook for setting debounce time for specified gpio in
- *      interrupt triggered gpio chips
+ *	interrupt triggered gpio chips
+ * @set_single_ended: optional hook for setting a line as open drain, open
+ *	source, or non-single ended (restore from open drain/source to normal
+ *	push-pull mode) this should be implemented if the hardware supports
+ *	open drain or open source settings. The GPIOlib will otherwise try
+ *	to emulate open drain/source by not actively driving lines high/low
+ *	if a consumer request this. The driver may return -ENOTSUPP if e.g.
+ *	it supports just open drain but not open source and is called
+ *	with LINE_MODE_OPEN_SOURCE as mode argument.
  * @to_irq: optional hook supporting non-static gpio_to_irq() mappings;
  *	implementation may not sleep
  * @dbg_show: optional routine to show contents in debugfs; default code
@@ -107,6 +131,8 @@ struct seq_file;
  */
 struct gpio_chip {
 	const char		*label;
+	struct device		*dev;
+	struct gpio_device	*gpiodev;
 	struct device		*parent;
 	struct device		*cdev;
 	struct module		*owner;
@@ -133,6 +159,12 @@ struct gpio_chip {
 	int			(*set_debounce)(struct gpio_chip *chip,
 						unsigned offset,
 						unsigned debounce);
+	int			(*set_single_ended)(struct gpio_chip *chip,
+						unsigned offset,
+						enum single_ended_mode mode);
+	
+	void			(*set_pinmux)(int gpio, int alt);
+	int			(*get_pinmux)(int gpio);					
 
 	int			(*to_irq)(struct gpio_chip *chip,
 						unsigned offset);
@@ -144,6 +176,7 @@ struct gpio_chip {
 	struct gpio_desc	*desc;
 	const char		*const *names;
 	bool			can_sleep;
+	bool			exported;
 	bool			irq_not_threaded;
 
 #if IS_ENABLED(CONFIG_GPIO_GENERIC)

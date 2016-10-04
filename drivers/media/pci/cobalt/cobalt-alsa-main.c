@@ -104,7 +104,7 @@ int cobalt_alsa_init(struct cobalt_stream *s)
 	/* This is a no-op for us.  We'll use the cobalt->instance */
 
 	/* (2) Create a card instance */
-	ret = snd_card_new(&cobalt->pci_dev->dev, SNDRV_DEFAULT_IDX1,
+	ret = snd_card_create(SNDRV_DEFAULT_IDX1,
 			   SNDRV_DEFAULT_STR1, THIS_MODULE, 0, &sc);
 	if (ret) {
 		cobalt_err("snd_card_new() failed with err %d\n", ret);

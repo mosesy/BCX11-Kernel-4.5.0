@@ -241,7 +241,7 @@ int go7007_snd_init(struct go7007 *go)
 	spin_lock_init(&gosnd->lock);
 	gosnd->hw_ptr = gosnd->w_idx = gosnd->avail = 0;
 	gosnd->capturing = 0;
-	ret = snd_card_new(go->dev, index[dev], id[dev], THIS_MODULE, 0,
+	ret = snd_card_create(index[dev], id[dev], THIS_MODULE, 0,
 			   &gosnd->card);
 	if (ret < 0) {
 		kfree(gosnd);

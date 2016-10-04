@@ -150,14 +150,11 @@ static int snd_ivtv_init(struct v4l2_device *v4l2_dev)
 	/* This is a no-op for us.  We'll use the itv->instance */
 
 	/* (2) Create a card instance */
-	/* use first available id if not specified otherwise*/
-	idx = index[itv->instance] == -1 ? SNDRV_DEFAULT_IDX1 : index[itv->instance];
-	ret = snd_card_new(&itv->pdev->dev,
-			   idx,
-			   SNDRV_DEFAULT_STR1, /* xid from end of shortname*/
-			   THIS_MODULE, 0, &sc);
+	ret = snd_card_create(SNDRV_DEFAULT_IDX1, /* use first available id */
+			      SNDRV_DEFAULT_STR1, /* xid from end of shortname*/
+			      THIS_MODULE, 0, &sc);
 	if (ret) {
-		IVTV_ALSA_ERR("%s: snd_card_new() failed with err %d\n",
+		IVTV_ALSA_ERR("%s: snd_card_create() failed with err %d\n",
 			      __func__, ret);
 		goto err_exit;
 	}

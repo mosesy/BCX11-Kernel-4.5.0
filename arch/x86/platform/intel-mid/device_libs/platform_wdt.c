@@ -26,19 +26,28 @@ static struct platform_device wdt_dev = {
 
 static int tangier_probe(struct platform_device *pdev)
 {
-	int gsi;
-	struct irq_alloc_info info;
+	int ioapic;
+	int irq;
 	struct intel_mid_wdt_pdata *pdata = pdev->dev.platform_data;
+	struct io_apic_irq_attr irq_attr = { 0 };
 
 	if (!pdata)
 		return -EINVAL;
 
-	/* IOAPIC builds identity mapping between GSI and IRQ on MID */
-	gsi = pdata->irq;
-	ioapic_set_alloc_attr(&info, cpu_to_node(0), 1, 0);
-	if (mp_map_gsi_to_irq(gsi, IOAPIC_MAP_ALLOC, &info) <= 0) {
+	irq = pdata->irq;
+	ioapic = mp_find_ioapic(irq);
+	if (ioapic >= 0) {
+		int ret;
+		irq_attr.ioapic = ioapic;
+		irq_attr.ioapic_pin = irq;
+		irq_attr.trigger = 1;
+		/* irq_attr.polarity = 0; -> Active high */
+		ret = io_apic_set_pci_routing(NULL, irq, &irq_attr);
+		if (ret)
+			return ret;
+	} else {
 		dev_warn(&pdev->dev, "cannot find interrupt %d in ioapic\n",
-			 gsi);
+			 irq);
 		return -EINVAL;
 	}
 

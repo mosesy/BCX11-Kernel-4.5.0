@@ -136,7 +136,9 @@ struct hrtimer_sleeper {
  *			timer to a base on another cpu.
  * @clockid:		clock id for per_cpu support
  * @active:		red black tree root node for the active timers
+ * @resolution:		the resolution of the clock, in nanoseconds
  * @get_time:		function to retrieve the current time of the clock
+ * @softirq_time:	the time when running the hrtimer queue in the softirq
  * @offset:		offset of this clock to the monotonic base
  */
 struct hrtimer_clock_base {
@@ -144,7 +146,9 @@ struct hrtimer_clock_base {
 	int			index;
 	clockid_t		clockid;
 	struct timerqueue_head	active;
+	ktime_t			resolution;
 	ktime_t			(*get_time)(void);
+	ktime_t			softirq_time;
 	ktime_t			offset;
 } __attribute__((__aligned__(HRTIMER_CLOCK_BASE_ALIGN)));
 
@@ -414,6 +418,7 @@ static inline void hrtimer_restart(struct hrtimer *timer)
 
 /* Query timers: */
 extern ktime_t __hrtimer_get_remaining(const struct hrtimer *timer, bool adjust);
+extern int hrtimer_get_res(const clockid_t which_clock, struct timespec *tp);
 
 static inline ktime_t hrtimer_get_remaining(const struct hrtimer *timer)
 {
@@ -491,5 +496,12 @@ extern void __init hrtimers_init(void);
 
 /* Show pending timers: */
 extern void sysrq_timer_list_show(void);
+
+int hrtimers_prepare_cpu(unsigned int cpu);
+#ifdef CONFIG_HOTPLUG_CPU
+int hrtimers_dead_cpu(unsigned int cpu);
+#else
+#define hrtimers_dead_cpu	NULL
+#endif
 
 #endif
