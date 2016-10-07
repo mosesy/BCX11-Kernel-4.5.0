@@ -20,8 +20,6 @@
 #include <linux/export.h>
 #include <trace/events/asoc.h>
 
-#define DEBUG 1
-
 /**
  * snd_soc_jack_new - Create a new jack
  * @codec: ASoC codec

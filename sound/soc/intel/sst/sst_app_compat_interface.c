@@ -23,8 +23,6 @@
  *  This driver exposes the audio engine functionalities to the ALSA
  *	and middleware.
  */
-//#define DEBUG 1
-
 /* This file is included from sst.c */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 

@@ -20,8 +20,6 @@
  *
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
-//#define DEBUG 1
- 
 #include <linux/slab.h>
 #include <sound/intel_sst_ioctl.h>
 #include <sound/soc.h>

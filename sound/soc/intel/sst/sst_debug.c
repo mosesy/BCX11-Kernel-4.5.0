@@ -27,8 +27,6 @@
  *   - Reading/Writing SST SHIM registers
  *   - Reading/Enabling Input OSC Clock
  */
-#define DEBUG 1
-
 #define pr_fmt(fmt) KBUILD_MODNAME ": debugfs: " fmt
 
 #include <linux/fs.h>

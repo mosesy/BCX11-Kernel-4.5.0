@@ -26,8 +26,6 @@
  *  This file contains all dsp controlling functions like firmware download,
  * setting/resetting dsp cores, etc
  */
-#define DEBUG 1
-
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/pci.h>

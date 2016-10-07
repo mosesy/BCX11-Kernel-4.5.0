@@ -25,8 +25,6 @@
  *
  *  This file contains all private functions
  */
-#define DEBUG 1
-
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/kobject.h>

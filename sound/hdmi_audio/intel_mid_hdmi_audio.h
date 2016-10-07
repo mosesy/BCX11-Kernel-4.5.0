@@ -16,10 +16,6 @@
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *  General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License along
- *  with this program; if not, write to the Free Software Foundation, Inc.,
- *  59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
- *
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * ALSA driver for Intel MID HDMI audio controller
  */
@@ -38,8 +34,8 @@
 #define OSPM_DISPLAY_ISLAND	0x40
 
 typedef enum _UHBUsage {
-    OSPM_UHB_ONLY_IF_ON = 0,
-    OSPM_UHB_FORCE_POWER_ON,
+	OSPM_UHB_ONLY_IF_ON = 0,
+	OSPM_UHB_FORCE_POWER_ON,
 } UHBUsage;
 
 bool ospm_power_using_hw_begin(int hw_island, UHBUsage usage);
@@ -135,7 +131,7 @@ typedef union {
 			};
 		};
 
-		/* Byte[2] = Baseline Lenght field */
+		/* Byte[2] = Baseline Length field */
 		uint8_t baseline_eld_length; /* Length of the Baseline structure
 					      *	divided by Four.
 					      */
@@ -228,7 +224,7 @@ typedef union {
  * @STREAM_RUNNING: Stream running
  * @STREAM_PAUSED: Stream paused
  * @STREAM_DROPPED: Stream dropped
- * */
+ */
 enum had_stream_status {
 	STREAM_INIT = 0,
 	STREAM_RUNNING = 1,
@@ -238,7 +234,7 @@ enum had_stream_status {
 
 /**
  * enum had_status_stream - HAD stream states
- * */
+ */
 enum had_status_stream {
 	HAD_INIT = 0,
 	HAD_RUNNING_STREAM,
@@ -291,8 +287,10 @@ enum hdmi_ctrl_reg_offset_v1 {
 	AUD_HDMIW_INFOFR	= 0x114,
 };
 
-/* Delta changes in HDMI controller register offsets
- * compare to v1 version */
+/*
+ * Delta changes in HDMI controller register offsets
+ * compare to v1 version
+ */
 
 enum hdmi_ctrl_reg_offset_v2 {
 	AUD_HDMI_STATUS_v2	= 0x64,
@@ -346,7 +344,7 @@ struct channel_map_table {
  * @cfg_regx: individual register bits
  * @cfg_regval: full register value
  *
- * */
+ */
 union aud_cfg {
 	struct {
 		u32 aud_en:1;
@@ -386,7 +384,7 @@ union aud_cfg {
  * @status_0_regx:individual register bits
  * @status_0_regval:full register value
  *
- * */
+ */
 union aud_ch_status_0 {
 	struct {
 		u32 ch_status:1;
@@ -410,7 +408,7 @@ union aud_ch_status_0 {
  * @status_1_regx: individual register bits
  * @status_1_regval: full register value
  *
- **/
+ */
 union aud_ch_status_1 {
 	struct {
 		u32 max_wrd_len:1;
@@ -426,7 +424,7 @@ union aud_ch_status_1 {
  * @cts_regx: individual register bits
  * @cts_regval: full register value
  *
- * */
+ */
 union aud_hdmi_cts {
 	struct {
 		u32 cts_val:20;
@@ -447,7 +445,7 @@ union aud_hdmi_cts {
  * @n_regx: individual register bits
  * @n_regval: full register value
  *
-*/
+ */
 union aud_hdmi_n_enable {
 	struct {
 		u32 n_val:20;
@@ -468,7 +466,7 @@ union aud_hdmi_n_enable {
  * @buf_cfg_regx: individual register bits
  * @buf_cfgval: full register value
  *
-*/
+ */
 union aud_buf_config {
 	struct {
 		u32 fifo_width:8;
@@ -492,7 +490,7 @@ union aud_buf_config {
  * @buf_ch_swap_regx: individual register bits
  * @buf_ch_swap_val: full register value
  *
- * */
+ */
 union aud_buf_ch_swap {
 	struct {
 		u32 first_0:3;
@@ -514,7 +512,7 @@ union aud_buf_ch_swap {
  * @buf_addr_regx: individual register bits
  * @buf_addr_val: full register value
  *
- * */
+ */
 union aud_buf_addr {
 	struct {
 		u32 valid:1;
@@ -531,7 +529,7 @@ union aud_buf_addr {
  * @buf_len_regx: individual register bits
  * @buf_len_val: full register value
  *
- * */
+ */
 union aud_buf_len {
 	struct {
 		u32 buf_len:20;
@@ -546,7 +544,7 @@ union aud_buf_len {
  * @ctrl_regx: individual register bits
  * @ctrl_val: full register value
  *
- * */
+ */
 union aud_ctrl_st {
 	struct {
 		u32 ram_addr:4;
@@ -569,7 +567,7 @@ union aud_ctrl_st {
  * @fr1_regx: individual register bits
  * @fr1_val: full register value
  *
- * */
+ */
 union aud_info_frame1 {
 	struct {
 		u32 pkt_type:8;
@@ -623,7 +621,7 @@ union aud_info_frame3 {
 struct pcm_stream_info {
 	int		str_id;
 	void		*had_substream;
-	void		(*period_elapsed) (void *had_substream);
+	void		(*period_elapsed)(void *had_substream);
 	u32		buffer_ptr;
 	u64		buffer_rendered;
 	u32		ring_buf_size;
@@ -700,18 +698,18 @@ struct snd_intelhad {
 };
 
 struct had_ops {
-	void (*enable_audio) (struct snd_pcm_substream *substream,
+	void (*enable_audio)(struct snd_pcm_substream *substream,
 			u8 enable);
-	void (*reset_audio) (u8 reset);
-	int (*prog_n) (u32 aud_samp_freq, u32 *n_param,
+	void (*reset_audio)(u8 reset);
+	int (*prog_n)(u32 aud_samp_freq, u32 *n_param,
 			struct snd_intelhad *intelhaddata);
-	void (*prog_cts) (u32 aud_samp_freq, u32 tmds, u32 n_param,
+	void (*prog_cts)(u32 aud_samp_freq, u32 tmds, u32 n_param,
 			struct snd_intelhad *intelhaddata);
-	int (*audio_ctrl) (struct snd_pcm_substream *substream,
+	int (*audio_ctrl)(struct snd_pcm_substream *substream,
 				struct snd_intelhad *intelhaddata);
-	void (*prog_dip) (struct snd_pcm_substream *substream,
+	void (*prog_dip)(struct snd_pcm_substream *substream,
 				struct snd_intelhad *intelhaddata);
-	void (*handle_underrun) (struct snd_intelhad *intelhaddata);
+	void (*handle_underrun)(struct snd_intelhad *intelhaddata);
 };
 
 
@@ -734,8 +732,8 @@ void had_build_channel_allocation_map(struct snd_intelhad *intelhaddata);
 
 /* Register access functions */
 inline int had_get_hwstate(struct snd_intelhad *intelhaddata);
-inline int had_get_caps(enum had_caps_list query_element , void *capabilties);
-inline int had_set_caps(enum had_caps_list set_element , void *capabilties);
+inline int had_get_caps(enum had_caps_list query_element, void *capabilties);
+inline int had_set_caps(enum had_caps_list set_element, void *capabilties);
 inline int had_read_register(uint32_t reg_addr, uint32_t *data);
 inline int had_write_register(uint32_t reg_addr, uint32_t data);
 inline int had_read_modify(uint32_t reg_addr, uint32_t data, uint32_t mask);

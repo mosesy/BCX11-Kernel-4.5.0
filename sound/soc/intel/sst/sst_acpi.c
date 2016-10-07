@@ -19,7 +19,6 @@
  * 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
  *
  */
-#define DEBUG 1
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 

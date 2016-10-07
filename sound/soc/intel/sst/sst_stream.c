@@ -25,8 +25,6 @@
  *
  *  This file contains the stream operations of SST driver
  */
-#define DEBUG 1
-
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/pci.h>

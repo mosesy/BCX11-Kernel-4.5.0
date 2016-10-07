@@ -16,10 +16,6 @@
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *  General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License along
- *  with this program; if not, write to the Free Software Foundation, Inc.,
- *  59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
- *
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * ALSA driver for Intel MID HDMI audio controller.  This file contains
  * interface functions exposed to HDMI Display driver and code to register
@@ -132,9 +128,10 @@ int hdmi_audio_suspend(void *haddata, hdmi_audio_event_t event)
 
 	intelhaddata->drv_status = HAD_DRV_SUSPENDED;
 	spin_unlock_irqrestore(&intelhaddata->had_spinlock, flag_irqs);
-	/* ToDo: Need to disable UNDERRUN interrupts as well
-	   caps = HDMI_AUDIO_UNDERRUN | HDMI_AUDIO_BUFFER_DONE;
-	   */
+	/*
+	 * ToDo: Need to disable UNDERRUN interrupts as well
+	 *  caps = HDMI_AUDIO_UNDERRUN | HDMI_AUDIO_BUFFER_DONE;
+	 */
 	caps = HDMI_AUDIO_BUFFER_DONE;
 	had_set_caps(HAD_SET_DISABLE_AUDIO_INT, &caps);
 	had_set_caps(HAD_SET_DISABLE_AUDIO, NULL);
@@ -165,7 +162,7 @@ int hdmi_audio_resume(void *haddata)
 		return 0;
 	}
 
-	if (HAD_DRV_SUSPENDED != intelhaddata->drv_status) {
+	if (intelhaddata->drv_status != HAD_DRV_SUSPENDED) {
 		spin_unlock_irqrestore(&intelhaddata->had_spinlock, flag_irqs);
 		pr_err("had is not in suspended state\n");
 		return 0;
@@ -179,9 +176,10 @@ int hdmi_audio_resume(void *haddata)
 
 	intelhaddata->drv_status = HAD_DRV_CONNECTED;
 	spin_unlock_irqrestore(&intelhaddata->had_spinlock, flag_irqs);
-	/* ToDo: Need to enable UNDERRUN interrupts as well
-	   caps = HDMI_AUDIO_UNDERRUN | HDMI_AUDIO_BUFFER_DONE;
-	   */
+	/*
+	 * ToDo: Need to enable UNDERRUN interrupts as well
+	 * caps = HDMI_AUDIO_UNDERRUN | HDMI_AUDIO_BUFFER_DONE;
+	 */
 	caps = HDMI_AUDIO_BUFFER_DONE;
 	retval = had_set_caps(HAD_SET_ENABLE_AUDIO_INT, &caps);
 	retval = had_set_caps(HAD_SET_ENABLE_AUDIO, NULL);
@@ -214,6 +212,7 @@ static inline int had_chk_intrmiss(struct snd_intelhad *intelhaddata,
 		/* Reprogram registers*/
 		for (i = buff_done; i < buf_id; i++) {
 			int j = i % 4;
+
 			buf_size = intelhaddata->buf_info[j].buf_size;
 			buf_addr = intelhaddata->buf_info[j].buf_addr;
 			had_write_register(AUD_BUF_A_LENGTH +
@@ -387,6 +386,19 @@ int had_process_hot_plug(struct snd_intelhad *intelhaddata)
 
 	pr_debug("Processing HOT_PLUG, buf_id = %d\n", buf_id);
 
+	 /* Query display driver for audio register base */
+	if (intelhaddata->reg_ops.hdmi_audio_get_register_base
+		(&intelhaddata->audio_reg_base)) {
+			pr_err("Unable to get audio reg base from Display driver\n");
+			goto err;
+	}
+	if(intelhaddata->audio_reg_base == 0){
+		pr_err("audio reg base value is NULL\n");
+		goto err;
+	}
+
+	pr_debug("%s audio_reg_base = %x\n",__func__, intelhaddata->audio_reg_base);
+
 	/* Safety check */
 	if (substream) {
 		pr_debug("There should not be active PB from ALSA\n");
@@ -398,6 +410,11 @@ int had_process_hot_plug(struct snd_intelhad *intelhaddata)
 
 	had_build_channel_allocation_map(intelhaddata);
 
+	return retval;
+
+err:
+	pm_runtime_disable(intelhaddata->dev);
+	intelhaddata->dev = NULL;
 	return retval;
 }
 
@@ -440,6 +457,7 @@ int had_process_hot_unplug(struct snd_intelhad *intelhaddata)
 	spin_unlock_irqrestore(&intelhaddata->had_spinlock, flag_irqs);
 	kfree(intelhaddata->chmap->chmap);
 	intelhaddata->chmap->chmap = NULL;
+	intelhaddata->audio_reg_base = 0;
 	pr_debug("%s: unlocked -> returned\n", __func__);
 
 	return retval;
@@ -469,7 +487,7 @@ int had_event_handler(enum had_event_type event_type, void *data)
 	 * Thus, a big lock is acquired to maintain atomicity.
 	 * This can be optimized later.
 	 * Currently, only buffer_done/_underrun executes in INTR context.
-	 * Also, locking is implemented seperately to avoid real contention
+	 * Also, locking is implemented separately to avoid real contention
 	 * of data(struct intelhaddata) between IRQ/SOFT_IRQ/PROCESS context.
 	 */
 	substream = intelhaddata->stream_info.had_substream;

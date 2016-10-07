@@ -25,8 +25,6 @@
  * This file defines the interface  between the platform driver and the SST
  * driver.
  */
-#define DEBUG 1
-
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/delay.h>
