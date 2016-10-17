@@ -49,13 +49,10 @@ struct devs_id {
  * identified via MSRs.
  */
 enum intel_mid_cpu_type {
-	INTEL_CPU_CHIP_NOTMID = 0,
 	/* 1 was Moorestown */
 	INTEL_MID_CPU_CHIP_PENWELL = 2,
 	INTEL_MID_CPU_CHIP_CLOVERVIEW,
 	INTEL_MID_CPU_CHIP_TANGIER,
-	INTEL_MID_CPU_CHIP_VALLEYVIEW2,
-	INTEL_MID_CPU_CHIP_ANNIEDALE,
 };
 
 extern enum intel_mid_cpu_type __intel_mid_cpu_chip;
@@ -138,12 +135,6 @@ extern enum intel_mid_timer_options intel_mid_timer_options;
 
 #define SFI_MTMR_MAX_NUM 8
 #define SFI_MRTC_MAX	8
-
-extern struct console early_mrst_console;
-extern void mrst_early_console_init(void);
-
-extern struct console early_hsu_console;
-extern void hsu_early_console_init(const char *);
 
 extern void intel_scu_devices_create(void);
 extern void intel_scu_devices_destroy(void);

@@ -23,7 +23,6 @@
 #include <linux/slab.h>
 #include <linux/mount.h>
 #include <linux/magic.h>
-#include <linux/namei.h>
 
 #include <asm/uaccess.h>
 
@@ -33,8 +32,6 @@ static void proc_evict_inode(struct inode *inode)
 {
 	struct proc_dir_entry *de;
 	struct ctl_table_header *head;
-	const struct proc_ns_operations *ns_ops;
-	void *ns;
 
 	truncate_inode_pages_final(&inode->i_data);
 	clear_inode(inode);
@@ -43,7 +40,7 @@ static void proc_evict_inode(struct inode *inode)
 	put_pid(PROC_I(inode)->pid);
 
 	/* Let go of any associated proc directory entry */
-	de = PROC_I(inode)->pde;
+	de = PDE(inode);
 	if (de)
 		pde_put(de);
 	head = PROC_I(inode)->sysctl;
@@ -51,11 +48,6 @@ static void proc_evict_inode(struct inode *inode)
 		RCU_INIT_POINTER(PROC_I(inode)->sysctl, NULL);
 		sysctl_head_put(head);
 	}
-	/* Release any associated namespace */
-	ns_ops = PROC_I(inode)->ns.ns_ops;
-	ns = PROC_I(inode)->ns.ns;
-	if (ns_ops && ns)
-		ns_ops->put(ns);
 }
 
 static struct kmem_cache * proc_inode_cachep;
@@ -74,8 +66,7 @@ static struct inode *proc_alloc_inode(struct super_block *sb)
 	ei->pde = NULL;
 	ei->sysctl = NULL;
 	ei->sysctl_entry = NULL;
-	ei->ns.ns = NULL;
-	ei->ns.ns_ops = NULL;
+	ei->ns_ops = NULL;
 	inode = &ei->vfs_inode;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	return inode;
@@ -104,7 +95,8 @@ void __init proc_init_inodecache(void)
 	proc_inode_cachep = kmem_cache_create("proc_inode_cache",
 					     sizeof(struct proc_inode),
 					     0, (SLAB_RECLAIM_ACCOUNT|
-						SLAB_MEM_SPREAD|SLAB_PANIC),
+						SLAB_MEM_SPREAD|SLAB_ACCOUNT|
+						SLAB_PANIC),
 					     init_once);
 }
 
@@ -402,24 +394,25 @@ static const struct file_operations proc_reg_file_ops_no_compat = {
 };
 #endif
 
-static void *proc_follow_link(struct dentry *dentry, struct nameidata *nd)
-{
-	struct proc_dir_entry *pde = PDE(dentry->d_inode);
-	if (unlikely(!use_pde(pde)))
-		return ERR_PTR(-EINVAL);
-	nd_set_link(nd, pde->data);
-	return pde;
-}
-
-static void proc_put_link(struct dentry *dentry, struct nameidata *nd, void *p)
+static void proc_put_link(void *p)
 {
 	unuse_pde(p);
 }
 
+static const char *proc_get_link(struct dentry *dentry,
+				 struct inode *inode,
+				 struct delayed_call *done)
+{
+	struct proc_dir_entry *pde = PDE(inode);
+	if (unlikely(!use_pde(pde)))
+		return ERR_PTR(-EINVAL);
+	set_delayed_call(done, proc_put_link, pde);
+	return pde->data;
+}
+
 const struct inode_operations proc_link_inode_operations = {
 	.readlink	= generic_readlink,
-	.follow_link	= proc_follow_link,
-	.put_link	= proc_put_link,
+	.get_link	= proc_get_link,
 };
 
 struct inode *proc_get_inode(struct super_block *sb, struct proc_dir_entry *de)
@@ -431,6 +424,10 @@ struct inode *proc_get_inode(struct super_block *sb, struct proc_dir_entry *de)
 		inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 		PROC_I(inode)->pde = de;
 
+		if (is_empty_pde(de)) {
+			make_empty_dir_inode(inode);
+			return inode;
+		}
 		if (de->mode) {
 			inode->i_mode = de->mode;
 			inode->i_uid = de->uid;
@@ -463,6 +460,7 @@ struct inode *proc_get_inode(struct super_block *sb, struct proc_dir_entry *de)
 int proc_fill_super(struct super_block *s)
 {
 	struct inode *root_inode;
+	int ret;
 
 	s->s_flags |= MS_NODIRATIME | MS_NOSUID | MS_NOEXEC;
 	s->s_blocksize = 1024;
@@ -484,5 +482,9 @@ int proc_fill_super(struct super_block *s)
 		return -ENOMEM;
 	}
 
-	return proc_setup_self(s);
+	ret = proc_setup_self(s);
+	if (ret) {
+		return ret;
+	}
+	return proc_setup_thread_self(s);
 }

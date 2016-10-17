@@ -1,348 +1,360 @@
 /*
- * XGene MSI Driver
+ * APM X-Gene MSI Driver
  *
- * Copyright (c) 2010, Applied Micro Circuits Corporation
+ * Copyright (c) 2014, Applied Micro Circuits Corporation
  * Author: Tanmay Inamdar <tinamdar@apm.com>
- *         Tuan Phan <tphan@apm.com>
- *         Jim Hull <jim.hull@hp.com>
+ *	   Duc Dang <dhdang@apm.com>
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
+ * This program is free software; you can redistribute  it and/or modify it
+ * under  the terms of  the GNU General  Public License as published by the
+ * Free Software Foundation;  either version 2 of the  License, or (at your
+ * option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
- * MA 02111-1307 USA
- *
  */
-#include <linux/platform_device.h>
+#include <linux/cpu.h>
 #include <linux/interrupt.h>
-#include <linux/irq.h>
-#include <linux/irqchip/chained_irq.h>
-#include <linux/irqdomain.h>
-#include <linux/bootmem.h>
+#include <linux/module.h>
 #include <linux/msi.h>
-#include <linux/pci.h>
-#include <linux/slab.h>
-#include <linux/export.h>
-#include <linux/of.h>
-#include <linux/of_platform.h>
 #include <linux/of_irq.h>
-#include <linux/of_address.h>
-#include <linux/acpi.h>
-#include <linux/efi.h>
-#include <asm/hw_irq.h>
-#include <asm/io.h>
-#include <asm/msi_bitmap.h>
+#include <linux/irqchip/chained_irq.h>
+#include <linux/pci.h>
+#include <linux/platform_device.h>
+#include <linux/of_pci.h>
 
-#define NR_MSI_REG		16
-#define IRQS_PER_MSI_INDEX	32
-#define IRQS_PER_MSI_REG	256
-#define NR_MSI_IRQS		(NR_MSI_REG * IRQS_PER_MSI_REG)
+#define MSI_IR0			0x000000
+#define MSI_INT0		0x800000
+#define IDX_PER_GROUP		8
+#define IRQS_PER_IDX		16
+#define NR_HW_IRQS		16
+#define NR_MSI_VEC		(IDX_PER_GROUP * IRQS_PER_IDX * NR_HW_IRQS)
 
-#define XGENE_PIC_IP_MASK	0x0000000F
-#define XGENE_PIC_IP_GIC	0x00000001
-
-/* PCIe MSI Index Registers */
-#define MSI0IR0			0x000000
-#define MSIFIR7			0x7F0000
-
-/* PCIe MSI Interrupt Register */
-#define MSI1INT0		0x800000
-#define MSI1INTF		0x8F0000
+struct xgene_msi_group {
+	struct xgene_msi	*msi;
+	int			gic_irq;
+	u32			msi_grp;
+};
 
 struct xgene_msi {
-	struct			irq_domain *irqhost;
-	unsigned long		cascade_irq;
-	u32			msiir_offset;
-	u32			msi_addr_lo;
-	u32			msi_addr_hi;
+	struct device_node	*node;
+	struct irq_domain	*inner_domain;
+	struct irq_domain	*msi_domain;
+	u64			msi_addr;
 	void __iomem		*msi_regs;
-	u32			feature;
-	int			msi_virqs[NR_MSI_REG];
-	struct			msi_bitmap bitmap;
-	struct list_head 	list; /* support multiple MSI banks */
-	phandle 		phandle;
+	unsigned long		*bitmap;
+	struct mutex		bitmap_lock;
+	struct xgene_msi_group	*msi_groups;
+	int			num_cpus;
 };
 
-#ifdef CONFIG_ARCH_MSLIM
-static inline u64 xgene_pcie_get_iof_addr(u64 addr)
+/* Global data */
+static struct xgene_msi xgene_msi_ctrl;
+
+static struct irq_chip xgene_msi_top_irq_chip = {
+	.name		= "X-Gene1 MSI",
+	.irq_enable	= pci_msi_unmask_irq,
+	.irq_disable	= pci_msi_mask_irq,
+	.irq_mask	= pci_msi_mask_irq,
+	.irq_unmask	= pci_msi_unmask_irq,
+};
+
+static struct  msi_domain_info xgene_msi_domain_info = {
+	.flags	= (MSI_FLAG_USE_DEF_DOM_OPS | MSI_FLAG_USE_DEF_CHIP_OPS |
+		  MSI_FLAG_PCI_MSIX),
+	.chip	= &xgene_msi_top_irq_chip,
+};
+
+/*
+ * X-Gene v1 has 16 groups of MSI termination registers MSInIRx, where
+ * n is group number (0..F), x is index of registers in each group (0..7)
+ * The register layout is as follows:
+ * MSI0IR0			base_addr
+ * MSI0IR1			base_addr +  0x10000
+ * ...				...
+ * MSI0IR6			base_addr +  0x60000
+ * MSI0IR7			base_addr +  0x70000
+ * MSI1IR0			base_addr +  0x80000
+ * MSI1IR1			base_addr +  0x90000
+ * ...				...
+ * MSI1IR7			base_addr +  0xF0000
+ * MSI2IR0			base_addr + 0x100000
+ * ...				...
+ * MSIFIR0			base_addr + 0x780000
+ * MSIFIR1			base_addr + 0x790000
+ * ...				...
+ * MSIFIR7			base_addr + 0x7F0000
+ * MSIINT0			base_addr + 0x800000
+ * MSIINT1			base_addr + 0x810000
+ * ...				...
+ * MSIINTF			base_addr + 0x8F0000
+ *
+ * Each index register supports 16 MSI vectors (0..15) to generate interrupt.
+ * There are total 16 GIC IRQs assigned for these 16 groups of MSI termination
+ * registers.
+ *
+ * Each MSI termination group has 1 MSIINTn register (n is 0..15) to indicate
+ * the MSI pending status caused by 1 of its 8 index registers.
+ */
+
+/* MSInIRx read helper */
+static u32 xgene_msi_ir_read(struct xgene_msi *msi,
+				    u32 msi_grp, u32 msir_idx)
 {
-	return mslim_pa_to_iof_axi(lower_32_bits(addr));
+	return readl_relaxed(msi->msi_regs + MSI_IR0 +
+			      (msi_grp << 19) + (msir_idx << 16));
 }
-#else
-#define xgene_pcie_get_iof_addr(addr)	addr
-#endif
 
-#define MSI_DRIVER_VERSION "0.1"
-
-struct xgene_msi_feature {
-	u32 xgene_pic_ip;
-	u32 msiir_offset; /* Offset of MSIIR, relative to start of MSIR bank */
-};
-
-struct xgene_msi_cascade_data {
-	struct xgene_msi *msi_data;
-	int index;
-};
-
-LIST_HEAD(msi_head);
-
-static const struct xgene_msi_feature gic_msi_feature = {
-	.xgene_pic_ip = XGENE_PIC_IP_GIC,
-	.msiir_offset = 0,
-};
-
-irq_hw_number_t virq_to_hw(unsigned int virq)
+/* MSIINTn read helper */
+static u32 xgene_msi_int_read(struct xgene_msi *msi, u32 msi_grp)
 {
-	struct irq_data *irq_data = irq_get_irq_data(virq);
-	return WARN_ON(!irq_data) ? 0 : irq_data->hwirq;
-} 
-
-static inline u32 xgene_msi_intr_read(phys_addr_t __iomem *base, 
-				      unsigned int reg)
-{
-	u32 irq_reg = MSI1INT0 + (reg << 16);
-	return readl((void *)((phys_addr_t) base + irq_reg));
-}
-
-static inline u32 xgene_msi_read(phys_addr_t __iomem *base, unsigned int group,
-			         unsigned int reg)
-{
-	u32 irq_reg = MSI0IR0 + (group << 19) + (reg << 16);
-	return readl((void *)((phys_addr_t) base + irq_reg));
+	return readl_relaxed(msi->msi_regs + MSI_INT0 + (msi_grp << 16));
 }
 
 /*
- * We do not need this actually. The MSIR register has been read once
- * in the cascade interrupt. So, this MSI interrupt has been acked
-*/
-static void xgene_msi_end_irq(struct irq_data *d)
+ * With 2048 MSI vectors supported, the MSI message can be constructed using
+ * following scheme:
+ * - Divide into 8 256-vector groups
+ *		Group 0: 0-255
+ *		Group 1: 256-511
+ *		Group 2: 512-767
+ *		...
+ *		Group 7: 1792-2047
+ * - Each 256-vector group is divided into 16 16-vector groups
+ *	As an example: 16 16-vector groups for 256-vector group 0-255 is
+ *		Group 0: 0-15
+ *		Group 1: 16-32
+ *		...
+ *		Group 15: 240-255
+ * - The termination address of MSI vector in 256-vector group n and 16-vector
+ *   group x is the address of MSIxIRn
+ * - The data for MSI vector in 16-vector group x is x
+ */
+static u32 hwirq_to_reg_set(unsigned long hwirq)
 {
+	return (hwirq / (NR_HW_IRQS * IRQS_PER_IDX));
 }
 
-#ifdef CONFIG_SMP
-static int xgene_msi_set_affinity(struct irq_data *d,
-				const struct cpumask *mask_val, bool force)
+static u32 hwirq_to_group(unsigned long hwirq)
 {
-	u64 virt_msir;
-
-	virt_msir = (u64)irq_get_handler_data(d->irq);
-	return irq_set_affinity(virt_msir, mask_val);
+	return (hwirq % NR_HW_IRQS);
 }
-#endif
 
-static struct irq_chip xgene_msi_chip = {
-	.irq_mask	= mask_msi_irq,
-	.irq_unmask	= unmask_msi_irq,
-	.irq_ack	= xgene_msi_end_irq,
-#ifdef CONFIG_SMP
-	.irq_set_affinity = xgene_msi_set_affinity,
-#endif
-	.name		= "xgene-msi",
+static u32 hwirq_to_msi_data(unsigned long hwirq)
+{
+	return ((hwirq / NR_HW_IRQS) % IRQS_PER_IDX);
+}
+
+static void xgene_compose_msi_msg(struct irq_data *data, struct msi_msg *msg)
+{
+	struct xgene_msi *msi = irq_data_get_irq_chip_data(data);
+	u32 reg_set = hwirq_to_reg_set(data->hwirq);
+	u32 group = hwirq_to_group(data->hwirq);
+	u64 target_addr = msi->msi_addr + (((8 * group) + reg_set) << 16);
+
+	msg->address_hi = upper_32_bits(target_addr);
+	msg->address_lo = lower_32_bits(target_addr);
+	msg->data = hwirq_to_msi_data(data->hwirq);
+}
+
+/*
+ * X-Gene v1 only has 16 MSI GIC IRQs for 2048 MSI vectors.  To maintain
+ * the expected behaviour of .set_affinity for each MSI interrupt, the 16
+ * MSI GIC IRQs are statically allocated to 8 X-Gene v1 cores (2 GIC IRQs
+ * for each core).  The MSI vector is moved fom 1 MSI GIC IRQ to another
+ * MSI GIC IRQ to steer its MSI interrupt to correct X-Gene v1 core.  As a
+ * consequence, the total MSI vectors that X-Gene v1 supports will be
+ * reduced to 256 (2048/8) vectors.
+ */
+static int hwirq_to_cpu(unsigned long hwirq)
+{
+	return (hwirq % xgene_msi_ctrl.num_cpus);
+}
+
+static unsigned long hwirq_to_canonical_hwirq(unsigned long hwirq)
+{
+	return (hwirq - hwirq_to_cpu(hwirq));
+}
+
+static int xgene_msi_set_affinity(struct irq_data *irqdata,
+				  const struct cpumask *mask, bool force)
+{
+	int target_cpu = cpumask_first(mask);
+	int curr_cpu;
+
+	curr_cpu = hwirq_to_cpu(irqdata->hwirq);
+	if (curr_cpu == target_cpu)
+		return IRQ_SET_MASK_OK_DONE;
+
+	/* Update MSI number to target the new CPU */
+	irqdata->hwirq = hwirq_to_canonical_hwirq(irqdata->hwirq) + target_cpu;
+
+	return IRQ_SET_MASK_OK;
+}
+
+static struct irq_chip xgene_msi_bottom_irq_chip = {
+	.name			= "MSI",
+	.irq_set_affinity       = xgene_msi_set_affinity,
+	.irq_compose_msi_msg	= xgene_compose_msi_msg,
 };
 
-static int xgene_msi_host_map(struct irq_domain *h, unsigned int virq,
-			      irq_hw_number_t hw)
+static int xgene_irq_domain_alloc(struct irq_domain *domain, unsigned int virq,
+				  unsigned int nr_irqs, void *args)
 {
-	struct xgene_msi *msi_data = h->host_data;
-	struct irq_chip *chip = &xgene_msi_chip;
+	struct xgene_msi *msi = domain->host_data;
+	int msi_irq;
 
-	pr_debug("\nENTER %s, virq=%u\n", __func__, virq);
-	irq_set_status_flags(virq, IRQ_TYPE_LEVEL_HIGH);
-	irq_set_chip_data(virq, msi_data);
-	irq_set_chip_and_handler(virq, chip, handle_level_irq);
-	
-	return 0;
-}
+	mutex_lock(&msi->bitmap_lock);
 
-static const struct irq_domain_ops xgene_msi_host_ops = {
-	.map = xgene_msi_host_map,
-};
-
-static int xgene_msi_init_allocator(struct xgene_msi *msi_data)
-{
-#ifdef CONFIG_ACPI
-	if (efi_enabled(EFI_BOOT))
-		return msi_bitmap_alloc(&msi_data->bitmap, NR_MSI_IRQS, NULL);
+	msi_irq = bitmap_find_next_zero_area(msi->bitmap, NR_MSI_VEC, 0,
+					     msi->num_cpus, 0);
+	if (msi_irq < NR_MSI_VEC)
+		bitmap_set(msi->bitmap, msi_irq, msi->num_cpus);
 	else
-#endif
-		return msi_bitmap_alloc(&msi_data->bitmap, NR_MSI_IRQS,
-			      msi_data->irqhost->of_node);
-}
+		msi_irq = -ENOSPC;
 
-int arch_msi_check_device(struct pci_dev *dev, int nvec, int type)
-{
-	pr_debug("ENTER %s\n", __func__);
+	mutex_unlock(&msi->bitmap_lock);
+
+	if (msi_irq < 0)
+		return msi_irq;
+
+	irq_domain_set_info(domain, virq, msi_irq,
+			    &xgene_msi_bottom_irq_chip, domain->host_data,
+			    handle_simple_irq, NULL, NULL);
+
 	return 0;
 }
 
-void arch_teardown_msi_irqs(struct pci_dev *dev)
+static void xgene_irq_domain_free(struct irq_domain *domain,
+				  unsigned int virq, unsigned int nr_irqs)
 {
-	struct msi_desc *entry;
-	struct xgene_msi *msi_data;
-	
-	pr_debug("ENTER %s\n", __func__);
-	list_for_each_entry(entry, &dev->msi_list, list) {
-		if (entry->irq == 0)
-			continue;
+	struct irq_data *d = irq_domain_get_irq_data(domain, virq);
+	struct xgene_msi *msi = irq_data_get_irq_chip_data(d);
+	u32 hwirq;
 
-		msi_data = irq_get_chip_data(entry->irq);
-		irq_set_msi_desc(entry->irq, NULL);
-		msi_bitmap_free_hwirqs(&msi_data->bitmap,
-				       virq_to_hw(entry->irq), 1);
-		irq_dispose_mapping(entry->irq);
-	}
+	mutex_lock(&msi->bitmap_lock);
+
+	hwirq = hwirq_to_canonical_hwirq(d->hwirq);
+	bitmap_clear(msi->bitmap, hwirq, msi->num_cpus);
+
+	mutex_unlock(&msi->bitmap_lock);
+
+	irq_domain_free_irqs_parent(domain, virq, nr_irqs);
 }
 
-static void xgene_compose_msi_msg(struct pci_dev *dev, int hwirq,
-				  struct msi_msg *msg,
-				  struct xgene_msi *msi_data)
+static const struct irq_domain_ops msi_domain_ops = {
+	.alloc  = xgene_irq_domain_alloc,
+	.free   = xgene_irq_domain_free,
+};
+
+static int xgene_allocate_domains(struct xgene_msi *msi)
 {
-	int reg_set, group;
+	msi->inner_domain = irq_domain_add_linear(NULL, NR_MSI_VEC,
+						  &msi_domain_ops, msi);
+	if (!msi->inner_domain)
+		return -ENOMEM;
 
-	group = hwirq % NR_MSI_REG;
-	reg_set = hwirq / (NR_MSI_REG * IRQS_PER_MSI_INDEX);
+	msi->msi_domain = pci_msi_create_irq_domain(of_node_to_fwnode(msi->node),
+						    &xgene_msi_domain_info,
+						    msi->inner_domain);
 
-	pr_debug("group = %d, reg_set : 0x%x\n", group, reg_set);
-	msg->address_lo = msi_data->msi_addr_lo +
-			  (((8 * group) + reg_set) << 16);
-	msg->address_hi = msi_data->msi_addr_hi;
-	msg->data = (hwirq / NR_MSI_REG) % IRQS_PER_MSI_INDEX;
-	pr_debug("addr : 0x%08x, data : 0x%x\n", msg->address_lo, msg->data);
-}
-
-int arch_setup_msi_irqs(struct pci_dev *pdev, int nvec, int type)
-{
-	struct device_node *np;
-	struct msi_desc *entry;
-	struct msi_msg msg;
-	u64 gic_irq;
-	unsigned int virq;
-	struct xgene_msi *msi_data;
-	phandle phandle = 0;
-	int rc = 0;
-	int hwirq = -1;
-
-	pr_debug("ENTER %s - nvec = %d, type = %d\n", __func__, nvec, type);
-#ifdef CONFIG_ACPI
-	if (!efi_enabled(EFI_BOOT))
-#endif
-	{
-		np = pci_device_to_OF_node(pdev);
-		/*
-		 * If the PCI node has an xgene,msi property, 
-		 * then we need to use it to find the specific MSI.
-		 */
-		np = of_parse_phandle(np, "xgene,msi", 0);
-		if (np) {
-			if (of_device_is_compatible(np, 
-						   "xgene,gic-msi-cascade")) 
-				phandle = np->phandle;
-			else {
-				dev_err(&pdev->dev,
-				"node %s has an invalid xgene,msi phandle %u\n",
-					 np->full_name, np->phandle);
-				rc = -EINVAL;
-				goto exit;
-			}
-		} else
-			dev_info(&pdev->dev, "Found no xgene,msi phandle\n");
-	}
-	
-	list_for_each_entry(entry, &pdev->msi_list, list) {
-		pr_debug("Loop over MSI devices\n");
-		/*
-		 * Loop over all the MSI devices until we find one that has an
-		 * available interrupt.
-		 */
-		list_for_each_entry(msi_data, &msi_head, list) {
-			if (phandle && (phandle != msi_data->phandle))
-				continue;
-			pr_debug("Xgene msi pointer : %p\n", msi_data);
-			hwirq = msi_bitmap_alloc_hwirqs(&msi_data->bitmap, 1);
-			break;
-		}
-
-		if (hwirq < 0) {
-			dev_err(&pdev->dev, 
-				 "could not allocate MSI interrupt\n");
-			rc = -ENOSPC;
-			goto exit;
-		}
-
-		virq = irq_create_mapping(msi_data->irqhost, hwirq);
-		if (virq == 0) {
-			dev_err(&pdev->dev, "fail mapping hwirq %i\n", hwirq);
-			msi_bitmap_free_hwirqs(&msi_data->bitmap, hwirq, 1);
-			rc = -ENOSPC;
-			goto exit;
-		}
-
-		gic_irq = msi_data->msi_virqs[hwirq % NR_MSI_REG];
-		pr_debug("Created Mapping HWIRQ %d on GIC IRQ %llu "
-			 "TO VIRQ %d\n",
-			 hwirq, gic_irq, virq);
-		/* chip_data is msi_data via host->hostdata in host->map() */
-		irq_set_msi_desc(virq, entry);
-		xgene_compose_msi_msg(pdev, hwirq, &msg, msi_data);
-		irq_set_handler_data(virq, (void *)gic_irq);
-		write_msi_msg(virq, &msg);
+	if (!msi->msi_domain) {
+		irq_domain_remove(msi->inner_domain);
+		return -ENOMEM;
 	}
 
-exit:
-	return rc;
+	return 0;
 }
 
-static void xgene_msi_cascade(unsigned int irq, struct irq_desc *desc)
+static void xgene_free_domains(struct xgene_msi *msi)
+{
+	if (msi->msi_domain)
+		irq_domain_remove(msi->msi_domain);
+	if (msi->inner_domain)
+		irq_domain_remove(msi->inner_domain);
+}
+
+static int xgene_msi_init_allocator(struct xgene_msi *xgene_msi)
+{
+	int size = BITS_TO_LONGS(NR_MSI_VEC) * sizeof(long);
+
+	xgene_msi->bitmap = kzalloc(size, GFP_KERNEL);
+	if (!xgene_msi->bitmap)
+		return -ENOMEM;
+
+	mutex_init(&xgene_msi->bitmap_lock);
+
+	xgene_msi->msi_groups = kcalloc(NR_HW_IRQS,
+					sizeof(struct xgene_msi_group),
+					GFP_KERNEL);
+	if (!xgene_msi->msi_groups)
+		return -ENOMEM;
+
+	return 0;
+}
+
+static void xgene_msi_isr(struct irq_desc *desc)
 {
 	struct irq_chip *chip = irq_desc_get_chip(desc);
-	struct xgene_msi_cascade_data *cascade_data;
-	struct xgene_msi *msi_data;
-	unsigned int cascade_irq;
-	int msir_index = -1;
-	u32 msir_value = 0;
-	u32 intr_index = 0;
-	u32 msi_intr_reg_value = 0;
-	u32 msi_intr_reg;
+	struct xgene_msi_group *msi_groups;
+	struct xgene_msi *xgene_msi;
+	unsigned int virq;
+	int msir_index, msir_val, hw_irq;
+	u32 intr_index, grp_select, msi_grp;
 
 	chained_irq_enter(chip, desc);
-	cascade_data = irq_get_handler_data(irq);
-	msi_data = cascade_data->msi_data;
 
-	msi_intr_reg = cascade_data->index;
+	msi_groups = irq_desc_get_handler_data(desc);
+	xgene_msi = msi_groups->msi;
+	msi_grp = msi_groups->msi_grp;
 
-	if (msi_intr_reg >= NR_MSI_REG)
-		cascade_irq = 0;
-
-	switch (msi_data->feature & XGENE_PIC_IP_MASK) {
-	case XGENE_PIC_IP_GIC:
-		msi_intr_reg_value = xgene_msi_intr_read(msi_data->msi_regs,
-						       msi_intr_reg);
-		break;
-	}
-
-	while (msi_intr_reg_value) {
-		msir_index = ffs(msi_intr_reg_value) - 1;
-		msir_value = xgene_msi_read(msi_data->msi_regs, msi_intr_reg,
-					  msir_index);
-		while (msir_value) {
-			intr_index = ffs(msir_value) - 1;
-			cascade_irq = irq_linear_revmap(msi_data->irqhost,
-				 msir_index * IRQS_PER_MSI_INDEX * NR_MSI_REG +
-				 intr_index * NR_MSI_REG + msi_intr_reg);
-			if (cascade_irq != 0)
-				generic_handle_irq(cascade_irq);
-			msir_value &= ~(1 << intr_index);
+	/*
+	 * MSIINTn (n is 0..F) indicates if there is a pending MSI interrupt
+	 * If bit x of this register is set (x is 0..7), one or more interupts
+	 * corresponding to MSInIRx is set.
+	 */
+	grp_select = xgene_msi_int_read(xgene_msi, msi_grp);
+	while (grp_select) {
+		msir_index = ffs(grp_select) - 1;
+		/*
+		 * Calculate MSInIRx address to read to check for interrupts
+		 * (refer to termination address and data assignment
+		 * described in xgene_compose_msi_msg() )
+		 */
+		msir_val = xgene_msi_ir_read(xgene_msi, msi_grp, msir_index);
+		while (msir_val) {
+			intr_index = ffs(msir_val) - 1;
+			/*
+			 * Calculate MSI vector number (refer to the termination
+			 * address and data assignment described in
+			 * xgene_compose_msi_msg function)
+			 */
+			hw_irq = (((msir_index * IRQS_PER_IDX) + intr_index) *
+				 NR_HW_IRQS) + msi_grp;
+			/*
+			 * As we have multiple hw_irq that maps to single MSI,
+			 * always look up the virq using the hw_irq as seen from
+			 * CPU0
+			 */
+			hw_irq = hwirq_to_canonical_hwirq(hw_irq);
+			virq = irq_find_mapping(xgene_msi->inner_domain, hw_irq);
+			WARN_ON(!virq);
+			if (virq != 0)
+				generic_handle_irq(virq);
+			msir_val &= ~(1 << intr_index);
 		}
-		msi_intr_reg_value &= ~(1 << msir_index);
+		grp_select &= ~(1 << msir_index);
+
+		if (!grp_select) {
+			/*
+			 * We handled all interrupts happened in this group,
+			 * resample this group MSI_INTx register in case
+			 * something else has been made pending in the meantime
+			 */
+			grp_select = xgene_msi_int_read(xgene_msi, msi_grp);
+		}
 	}
 
 	chained_irq_exit(chip, desc);
@@ -353,177 +365,200 @@ static int xgene_msi_remove(struct platform_device *pdev)
 	int virq, i;
 	struct xgene_msi *msi = platform_get_drvdata(pdev);
 
-	pr_debug("ENTER %s\n", __func__);
-	for (i = 0; i < NR_MSI_REG; i++) {
-		virq = msi->msi_virqs[i];
+	for (i = 0; i < NR_HW_IRQS; i++) {
+		virq = msi->msi_groups[i].gic_irq;
 		if (virq != 0)
-			irq_dispose_mapping(virq);
+			irq_set_chained_handler_and_data(virq, NULL, NULL);
 	}
+	kfree(msi->msi_groups);
 
-	if (msi->bitmap.bitmap)
-		msi_bitmap_free(&msi->bitmap);
+	kfree(msi->bitmap);
+	msi->bitmap = NULL;
+
+	xgene_free_domains(msi);
 
 	return 0;
 }
 
-static int xgene_msi_setup_hwirq(struct xgene_msi *msi,
-				 struct platform_device *pdev,
-				 int offset, int irq_index)
+static int xgene_msi_hwirq_alloc(unsigned int cpu)
 {
-	int virt_msir;
+	struct xgene_msi *msi = &xgene_msi_ctrl;
+	struct xgene_msi_group *msi_group;
 	cpumask_var_t mask;
-	struct xgene_msi_cascade_data *cascade_data = NULL;
+	int i;
+	int err;
 
-	virt_msir = platform_get_irq(pdev, irq_index);
-	if (virt_msir < 0) {
-		dev_err(&pdev->dev, "Cannot translate IRQ index %d\n",
-			irq_index);
-		return -EINVAL;
+	for (i = cpu; i < NR_HW_IRQS; i += msi->num_cpus) {
+		msi_group = &msi->msi_groups[i];
+		if (!msi_group->gic_irq)
+			continue;
+
+		irq_set_chained_handler(msi_group->gic_irq,
+					xgene_msi_isr);
+		err = irq_set_handler_data(msi_group->gic_irq, msi_group);
+		if (err) {
+			pr_err("failed to register GIC IRQ handler\n");
+			return -EINVAL;
+		}
+		/*
+		 * Statically allocate MSI GIC IRQs to each CPU core.
+		 * With 8-core X-Gene v1, 2 MSI GIC IRQs are allocated
+		 * to each core.
+		 */
+		if (alloc_cpumask_var(&mask, GFP_KERNEL)) {
+			cpumask_clear(mask);
+			cpumask_set_cpu(cpu, mask);
+			err = irq_set_affinity(msi_group->gic_irq, mask);
+			if (err)
+				pr_err("failed to set affinity for GIC IRQ");
+			free_cpumask_var(mask);
+		} else {
+			pr_err("failed to alloc CPU mask for affinity\n");
+			err = -EINVAL;
+		}
+
+		if (err) {
+			irq_set_chained_handler_and_data(msi_group->gic_irq,
+							 NULL, NULL);
+			return err;
+		}
 	}
-
-	cascade_data = devm_kzalloc(&pdev->dev, 
-			sizeof(struct xgene_msi_cascade_data), GFP_KERNEL);
-	if (!cascade_data) {
-		dev_err(&pdev->dev, "No memory for MSI cascade data\n");
-		return -ENOMEM;
-	}
-
-	if (alloc_cpumask_var(&mask, GFP_KERNEL)) {
-		cpumask_setall(mask);
-		irq_set_affinity(virt_msir, mask);
-		free_cpumask_var(mask);
-	}
-
-	msi->msi_virqs[irq_index] = virt_msir;
-	cascade_data->index = offset;
-	cascade_data->msi_data = msi;
-	irq_set_handler_data(virt_msir, cascade_data);
-	irq_set_chained_handler(virt_msir, xgene_msi_cascade);
-	pr_debug("mapped phys irq %d\n", virt_msir);
 
 	return 0;
 }
 
-static int xgene_msi_get_param(struct platform_device *pdev, const char *name,
-			       u32 *buf, int count)
+static void xgene_msi_hwirq_free(unsigned int cpu)
 {
-	int rc = 0;
+	struct xgene_msi *msi = &xgene_msi_ctrl;
+	struct xgene_msi_group *msi_group;
+	int i;
 
-#ifdef CONFIG_ACPI
-	if (efi_enabled(EFI_BOOT)) {
-		struct acpi_dsm_entry entry;
+	for (i = cpu; i < NR_HW_IRQS; i += msi->num_cpus) {
+		msi_group = &msi->msi_groups[i];
+		if (!msi_group->gic_irq)
+			continue;
 
-		if (acpi_dsm_lookup_value(ACPI_HANDLE(&pdev->dev),
-					  name, 0, &entry) || !entry.value)
-			return -EINVAL;
-
-		if (count == 2)
-			sscanf(entry.value, "%d %d", &buf[0], &buf[1]);
-		else
-			rc = -EINVAL;
-
-		kfree(entry.key);
-		kfree(entry.value);
-	} else
-#endif
-		if (of_property_read_u32_array(pdev->dev.of_node, name,
-					        buf, count))
-			rc = -EINVAL;
-
-	return rc;
+		irq_set_chained_handler_and_data(msi_group->gic_irq, NULL,
+						 NULL);
+	}
 }
+
+static int xgene_msi_cpu_callback(struct notifier_block *nfb,
+				  unsigned long action, void *hcpu)
+{
+	unsigned cpu = (unsigned long)hcpu;
+
+	switch (action) {
+	case CPU_ONLINE:
+	case CPU_ONLINE_FROZEN:
+		xgene_msi_hwirq_alloc(cpu);
+		break;
+	case CPU_DEAD:
+	case CPU_DEAD_FROZEN:
+		xgene_msi_hwirq_free(cpu);
+		break;
+	default:
+		break;
+	}
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block xgene_msi_cpu_notifier = {
+	.notifier_call = xgene_msi_cpu_callback,
+};
+
+static const struct of_device_id xgene_msi_match_table[] = {
+	{.compatible = "apm,xgene1-msi"},
+	{},
+};
 
 static int xgene_msi_probe(struct platform_device *pdev)
 {
-	struct xgene_msi *msi;
 	struct resource *res;
-	phys_addr_t msiir_offset;
-	int rc, j, irq_index, count;
-	u32 offset;
-	u32 buf[] = { 0, NR_MSI_IRQS};
+	int rc, irq_index;
+	struct xgene_msi *xgene_msi;
+	unsigned int cpu;
+	int virt_msir;
+	u32 msi_val, msi_idx;
 
-	msi = devm_kzalloc(&pdev->dev, sizeof(struct xgene_msi), GFP_KERNEL);
-	if (!msi) {
-		dev_err(&pdev->dev, "No memory for MSI structure\n");
-		return -ENOMEM;
-	}
+	xgene_msi = &xgene_msi_ctrl;
 
-	platform_set_drvdata(pdev, msi);
-
-#ifdef CONFIG_ACPI
-	if (efi_enabled(EFI_BOOT))
-		msi->irqhost = irq_domain_add_linear(NULL,
-				      NR_MSI_IRQS, &xgene_msi_host_ops, msi);
-	else
-#endif
-		msi->irqhost = irq_domain_add_linear(pdev->dev.of_node,
-				      NR_MSI_IRQS, &xgene_msi_host_ops, msi);
-	if (msi->irqhost == NULL) {
-		dev_err(&pdev->dev, "No memory for MSI irqhost\n");
-		rc = -ENOMEM;
-		goto error;
-	}
+	platform_set_drvdata(pdev, xgene_msi);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	msi->msi_regs = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(msi->msi_regs)) {
+	xgene_msi->msi_regs = devm_ioremap_resource(&pdev->dev, res);
+	if (IS_ERR(xgene_msi->msi_regs)) {
 		dev_err(&pdev->dev, "no reg space\n");
 		rc = -EINVAL;
 		goto error;
 	}
+	xgene_msi->msi_addr = res->start;
+	xgene_msi->node = pdev->dev.of_node;
+	xgene_msi->num_cpus = num_possible_cpus();
 
-	pr_debug("mapped 0x%08llx to 0x%p Size : 0x%08llx\n", res->start,
-		 msi->msi_regs, resource_size(res));
-
-	msiir_offset = lower_32_bits(xgene_pcie_get_iof_addr(res->start));
-	msi->msiir_offset = gic_msi_feature.msiir_offset +
-				  (msiir_offset & 0xfffff);
-	msi->msi_addr_hi = upper_32_bits(res->start);
-	msi->msi_addr_lo = gic_msi_feature.msiir_offset +
-				  (msiir_offset & 0xffffffff);
-	msi->feature = gic_msi_feature.xgene_pic_ip;
-
-#ifdef CONFIG_ACPI
-	if (efi_enabled(EFI_BOOT))
-		msi->phandle = 0;
-	else
-#endif
-		msi->phandle = pdev->dev.of_node->phandle;
-
-	rc = xgene_msi_init_allocator(msi);
+	rc = xgene_msi_init_allocator(xgene_msi);
 	if (rc) {
 		dev_err(&pdev->dev, "Error allocating MSI bitmap\n");
 		goto error;
 	}
 
-	rc = xgene_msi_get_param(pdev, "msi-available-ranges", buf, 2);
+	rc = xgene_allocate_domains(xgene_msi);
 	if (rc) {
-		dev_err(&pdev->dev, "Error getting MSI ranges\n");
+		dev_err(&pdev->dev, "Failed to allocate MSI domain\n");
 		goto error;
 	}
 
-	pr_debug("buf[0] = 0x%x buf[1] = 0x%x\n", buf[0], buf[1]);
-	if (buf[0] % IRQS_PER_MSI_REG || buf[1] % IRQS_PER_MSI_REG) {
-		pr_err_once("msi available range of"
-				  "%u at %u is not IRQ-aligned\n",
-				  buf[1], buf[0]);
-		rc = -EINVAL;
-		goto error;
-	}
-
-	offset = buf[0] / IRQS_PER_MSI_REG;
-	count  = buf[1] / IRQS_PER_MSI_REG;
-	pr_debug("offset = %d count = %d\n", offset, count);
-
-	for (irq_index = 0, j = 0; j < count; j++, irq_index++) {
-		rc = xgene_msi_setup_hwirq(msi, pdev, offset + j, irq_index);
-		if (rc)
+	for (irq_index = 0; irq_index < NR_HW_IRQS; irq_index++) {
+		virt_msir = platform_get_irq(pdev, irq_index);
+		if (virt_msir < 0) {
+			dev_err(&pdev->dev, "Cannot translate IRQ index %d\n",
+				irq_index);
+			rc = -EINVAL;
 			goto error;
+		}
+		xgene_msi->msi_groups[irq_index].gic_irq = virt_msir;
+		xgene_msi->msi_groups[irq_index].msi_grp = irq_index;
+		xgene_msi->msi_groups[irq_index].msi = xgene_msi;
 	}
 
-	list_add_tail(&msi->list, &msi_head);
+	/*
+	 * MSInIRx registers are read-to-clear; before registering
+	 * interrupt handlers, read all of them to clear spurious
+	 * interrupts that may occur before the driver is probed.
+	 */
+	for (irq_index = 0; irq_index < NR_HW_IRQS; irq_index++) {
+		for (msi_idx = 0; msi_idx < IDX_PER_GROUP; msi_idx++)
+			msi_val = xgene_msi_ir_read(xgene_msi, irq_index,
+						    msi_idx);
+		/* Read MSIINTn to confirm */
+		msi_val = xgene_msi_int_read(xgene_msi, irq_index);
+		if (msi_val) {
+			dev_err(&pdev->dev, "Failed to clear spurious IRQ\n");
+			rc = -EINVAL;
+			goto error;
+		}
+	}
 
-	pr_info("XGene: PCIe MSI driver v%s\n", MSI_DRIVER_VERSION);
+	cpu_notifier_register_begin();
+
+	for_each_online_cpu(cpu)
+		if (xgene_msi_hwirq_alloc(cpu)) {
+			dev_err(&pdev->dev, "failed to register MSI handlers\n");
+			cpu_notifier_register_done();
+			goto error;
+		}
+
+	rc = __register_hotcpu_notifier(&xgene_msi_cpu_notifier);
+	if (rc) {
+		dev_err(&pdev->dev, "failed to add CPU MSI notifier\n");
+		cpu_notifier_register_done();
+		goto error;
+	}
+
+	cpu_notifier_register_done();
+
+	dev_info(&pdev->dev, "APM X-Gene PCIe MSI driver loaded\n");
 
 	return 0;
 
@@ -532,36 +567,17 @@ error:
 	return rc;
 }
 
-static const struct of_device_id xgene_msi_of_ids[] = {
-	{
-		.compatible = "xgene,gic-msi",
-	},
-	{}
-};
-
-#ifdef CONFIG_ACPI
-static const struct acpi_device_id xgene_msi_acpi_ids[] = {
-	{"APMC0D0E", 0},
-	{},
-};
-#endif
-
 static struct platform_driver xgene_msi_driver = {
 	.driver = {
 		.name = "xgene-msi",
-		.owner = THIS_MODULE,
-		.of_match_table = xgene_msi_of_ids,
-#ifdef CONFIG_ACPI		
-		.acpi_match_table = ACPI_PTR(xgene_msi_acpi_ids),
-#endif
+		.of_match_table = xgene_msi_match_table,
 	},
 	.probe = xgene_msi_probe,
 	.remove = xgene_msi_remove,
 };
 
-static __init int xgene_msi_init(void)
+static int __init xgene_pcie_msi_init(void)
 {
 	return platform_driver_register(&xgene_msi_driver);
 }
-
-subsys_initcall_sync(xgene_msi_init);
+subsys_initcall(xgene_pcie_msi_init);

@@ -26,33 +26,6 @@
 #include "stub.h"
 
 /*
- * Define device IDs here if you want to explicitly limit exportable devices.
- * In most cases, wildcard matching will be okay because driver binding can be
- * changed dynamically by a userland program.
- */
-static struct usb_device_id stub_table[] = {
-#if 0
-	/* just an example */
-	{ USB_DEVICE(0x05ac, 0x0301) },   /* Mac 1 button mouse */
-	{ USB_DEVICE(0x0430, 0x0009) },   /* Plat Home Keyboard */
-	{ USB_DEVICE(0x059b, 0x0001) },   /* Iomega USB Zip 100 */
-	{ USB_DEVICE(0x04b3, 0x4427) },   /* IBM USB CD-ROM */
-	{ USB_DEVICE(0x05a9, 0xa511) },   /* LifeView USB cam */
-	{ USB_DEVICE(0x55aa, 0x0201) },   /* Imation card reader */
-	{ USB_DEVICE(0x046d, 0x0870) },   /* Qcam Express(QV-30) */
-	{ USB_DEVICE(0x04bb, 0x0101) },   /* IO-DATA HD 120GB */
-	{ USB_DEVICE(0x04bb, 0x0904) },   /* IO-DATA USB-ET/TX */
-	{ USB_DEVICE(0x04bb, 0x0201) },   /* IO-DATA USB-ET/TX */
-	{ USB_DEVICE(0x08bb, 0x2702) },   /* ONKYO USB Speaker */
-	{ USB_DEVICE(0x046d, 0x08b2) },   /* Logicool Qcam 4000 Pro */
-#endif
-	/* magic for wild card */
-	{ .driver_info = 1 },
-	{ 0, }                                     /* Terminating entry */
-};
-MODULE_DEVICE_TABLE(usb, stub_table);
-
-/*
  * usbip_status shows the status of usbip-host as long as this driver is bound
  * to the target device.
  */
@@ -338,7 +311,6 @@ static int stub_probe(struct usb_device *udev)
 {
 	struct stub_device *sdev = NULL;
 	const char *udev_busid = dev_name(&udev->dev);
-	int err = 0;
 	struct bus_id_priv *busid_priv;
 	int rc;
 
@@ -399,23 +371,28 @@ static int stub_probe(struct usb_device *udev)
 			(struct usb_dev_state *) udev);
 	if (rc) {
 		dev_dbg(&udev->dev, "unable to claim port\n");
-		return rc;
+		goto err_port;
 	}
 
-	err = stub_add_files(&udev->dev);
-	if (err) {
+	rc = stub_add_files(&udev->dev);
+	if (rc) {
 		dev_err(&udev->dev, "stub_add_files for %s\n", udev_busid);
-		dev_set_drvdata(&udev->dev, NULL);
-		usb_put_dev(udev);
-		kthread_stop_put(sdev->ud.eh);
-
-		busid_priv->sdev = NULL;
-		stub_device_free(sdev);
-		return err;
+		goto err_files;
 	}
 	busid_priv->status = STUB_BUSID_ALLOC;
 
 	return 0;
+err_files:
+	usb_hub_release_port(udev->parent, udev->portnum,
+			     (struct usb_dev_state *) udev);
+err_port:
+	dev_set_drvdata(&udev->dev, NULL);
+	usb_put_dev(udev);
+	kthread_stop_put(sdev->ud.eh);
+
+	busid_priv->sdev = NULL;
+	stub_device_free(sdev);
+	return rc;
 }
 
 static void shutdown_busid(struct bus_id_priv *busid_priv)

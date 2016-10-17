@@ -7,17 +7,13 @@ with the mask defined in the reboot node.
 
 Required properties:
 - compatible: should contain "syscon-reboot"
-- regmap: this is phandle to the register map node 
+- regmap: this is phandle to the register map node
 - offset: offset in the register map for the reboot register (in bytes)
 - mask: the reset value written to the reboot register (32 bit access)
 
 Default will be little endian mode, 32 bit access only.
 
 Examples:
-	regmapnode {
-		compatible = "apm,xgene-scu","syscon";
-		reg = <0xXXXXXXXX 0xXXXXXXXX>;
-	}
 
 	reboot {
 	   compatible = "syscon-reboot";

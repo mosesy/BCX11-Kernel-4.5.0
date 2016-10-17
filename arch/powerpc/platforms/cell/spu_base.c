@@ -181,7 +181,8 @@ static int __spu_trap_data_seg(struct spu *spu, unsigned long ea)
 	return 0;
 }
 
-extern int hash_page(unsigned long ea, unsigned long access, unsigned long trap); //XXX
+extern int hash_page(unsigned long ea, unsigned long access,
+		     unsigned long trap, unsigned long dsisr); //XXX
 static int __spu_trap_data_map(struct spu *spu, unsigned long ea, u64 dsisr)
 {
 	int ret;
@@ -196,7 +197,7 @@ static int __spu_trap_data_map(struct spu *spu, unsigned long ea, u64 dsisr)
 	    (REGION_ID(ea) != USER_REGION_ID)) {
 
 		spin_unlock(&spu->register_lock);
-		ret = hash_page(ea, _PAGE_PRESENT, 0x300);
+		ret = hash_page(ea, _PAGE_PRESENT, 0x300, dsisr);
 		spin_lock(&spu->register_lock);
 
 		if (!ret) {
@@ -574,7 +575,6 @@ static int __init create_spu(void *data)
 	int ret;
 	static int number;
 	unsigned long flags;
-	struct timespec ts;
 
 	ret = -ENOMEM;
 	spu = kzalloc(sizeof (*spu), GFP_KERNEL);
@@ -615,8 +615,7 @@ static int __init create_spu(void *data)
 	mutex_unlock(&spu_full_list_mutex);
 
 	spu->stats.util_state = SPU_UTIL_IDLE_LOADED;
-	ktime_get_ts(&ts);
-	spu->stats.tstamp = timespec_to_ns(&ts);
+	spu->stats.tstamp = ktime_get_ns();
 
 	INIT_LIST_HEAD(&spu->aff_list);
 
@@ -639,7 +638,6 @@ static const char *spu_state_names[] = {
 static unsigned long long spu_acct_time(struct spu *spu,
 		enum spu_utilization_state state)
 {
-	struct timespec ts;
 	unsigned long long time = spu->stats.times[state];
 
 	/*
@@ -647,10 +645,8 @@ static unsigned long long spu_acct_time(struct spu *spu,
 	 * statistics are not updated.  Apply the time delta from the
 	 * last recorded state of the spu.
 	 */
-	if (spu->stats.util_state == state) {
-		ktime_get_ts(&ts);
-		time += timespec_to_ns(&ts) - spu->stats.tstamp;
-	}
+	if (spu->stats.util_state == state)
+		time += ktime_get_ns() - spu->stats.tstamp;
 
 	return time / NSEC_PER_MSEC;
 }

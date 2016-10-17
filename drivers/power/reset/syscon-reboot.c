@@ -13,61 +13,49 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
- * MA 02111-1307 USA
- *
- * This driver provides system reboot functionality for APM X-Gene SoC.
- * For system shutdown, this is board specify. If a board designer
- * implements GPIO shutdown, use the gpio-poweroff.c driver.
  */
+#include <linux/delay.h>
 #include <linux/io.h>
-#include <linux/of_device.h>
-#include <linux/of_address.h>
-#include <linux/platform_device.h>
-#include <linux/stat.h>
-#include <linux/slab.h>
+#include <linux/notifier.h>
 #include <linux/mfd/syscon.h>
-#include <linux/regmap.h>
+#include <linux/of_address.h>
+#include <linux/of_device.h>
+#include <linux/platform_device.h>
 #include <linux/reboot.h>
-#include <asm/system_misc.h>
+#include <linux/regmap.h>
 
 struct syscon_reboot_context {
 	struct regmap *map;
 	u32 offset;
 	u32 mask;
+	struct notifier_block restart_handler;
 };
 
-static struct syscon_reboot_context *syscon_reboot_ctx;
-
-static void syscon_restart(enum reboot_mode reboot_mode, const char *cmd)
+static int syscon_restart_handle(struct notifier_block *this,
+					unsigned long mode, void *cmd)
 {
-	struct syscon_reboot_context *ctx = syscon_reboot_ctx;
-	unsigned long timeout;
+	struct syscon_reboot_context *ctx =
+			container_of(this, struct syscon_reboot_context,
+					restart_handler);
 
 	/* Issue the reboot */
-	if (ctx->map)
-		regmap_write(ctx->map, ctx->offset, ctx->mask);
+	regmap_write(ctx->map, ctx->offset, ctx->mask);
 
-	timeout = jiffies + HZ;
-	while (time_before(jiffies, timeout))
-		cpu_relax();
+	mdelay(1000);
 
 	pr_emerg("Unable to restart system\n");
+	return NOTIFY_DONE;
 }
 
 static int syscon_reboot_probe(struct platform_device *pdev)
 {
 	struct syscon_reboot_context *ctx;
 	struct device *dev = &pdev->dev;
+	int err;
 
 	ctx = devm_kzalloc(&pdev->dev, sizeof(*ctx), GFP_KERNEL);
-	if (!ctx) {
-		dev_err(&pdev->dev, "out of memory for context\n");
+	if (!ctx)
 		return -ENOMEM;
-	}
 
 	ctx->map = syscon_regmap_lookup_by_phandle(dev->of_node, "regmap");
 	if (IS_ERR(ctx->map))
@@ -79,13 +67,16 @@ static int syscon_reboot_probe(struct platform_device *pdev)
 	if (of_property_read_u32(pdev->dev.of_node, "mask", &ctx->mask))
 		return -EINVAL;
 
-	arm_pm_restart = syscon_restart;
-	syscon_reboot_ctx = ctx;
+	ctx->restart_handler.notifier_call = syscon_restart_handle;
+	ctx->restart_handler.priority = 192;
+	err = register_restart_handler(&ctx->restart_handler);
+	if (err)
+		dev_err(dev, "can't register restart notifier (err=%d)\n", err);
 
-	return 0;
+	return err;
 }
 
-static struct of_device_id syscon_reboot_of_match[] = {
+static const struct of_device_id syscon_reboot_of_match[] = {
 	{ .compatible = "syscon-reboot" },
 	{}
 };
@@ -97,4 +88,4 @@ static struct platform_driver syscon_reboot_driver = {
 		.of_match_table = syscon_reboot_of_match,
 	},
 };
-module_platform_driver(syscon_reboot_driver);
+builtin_platform_driver(syscon_reboot_driver);

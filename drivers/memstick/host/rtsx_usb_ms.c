@@ -706,8 +706,7 @@ poll_again:
 		if (host->eject)
 			break;
 
-		if (msleep_interruptible(1000))
-			flush_signals(current);
+		msleep(1000);
 	}
 
 	complete(&host->detect_ms_exit);
@@ -828,7 +827,6 @@ static struct platform_driver rtsx_usb_ms_driver = {
 	.remove		= rtsx_usb_ms_drv_remove,
 	.id_table       = rtsx_usb_ms_ids,
 	.driver		= {
-		.owner	= THIS_MODULE,
 		.name	= "rtsx_usb_ms",
 		.pm	= &rtsx_usb_ms_pm_ops,
 	},

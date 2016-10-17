@@ -1,16 +1,11 @@
-#EXTRA CFLAGS
-ccflags-y += -Werror
+# Core support
+obj-$(CONFIG_SND_SOC_INTEL_SST) += common/
 
-ifeq (${TARGET_BUILD_VARIANT},$(filter ${TARGET_BUILD_VARIANT}, eng))
-ccflags-y += -DCONFIG_SND_VERBOSE_PRINTK -DCONFIG_SND_DEBUG -DCONFIG_SND_DEBUG_VERBOSE
-endif
+# Platform Support
+obj-$(CONFIG_SND_SOC_INTEL_HASWELL) += haswell/
+obj-$(CONFIG_SND_SOC_INTEL_BAYTRAIL) += baytrail/
+obj-$(CONFIG_SND_SST_MFLD_PLATFORM) += atom/
+obj-$(CONFIG_SND_SOC_INTEL_SKYLAKE) += skylake/
 
-# SST Platform Driver
-PLATFORM_LIBS = platform-libs/controls_v1.o platform-libs/controls_v2.o platform-libs/controls_v2_dpcm.o \
-		platform-libs/ipc_lib_v2.o
-
-snd-soc-sst-platform-objs := pcm.o compress.o effects.o $(PLATFORM_LIBS)
-obj-$(CONFIG_SND_SST_PLATFORM) += snd-soc-sst-platform.o
-
-# Audio Comms
-obj-$(CONFIG_SND_SOC_COMMS_SSP) += ssp/
+# Machine support
+obj-$(CONFIG_SND_SOC) += boards/

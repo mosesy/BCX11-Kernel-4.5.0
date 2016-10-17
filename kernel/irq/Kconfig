@@ -30,6 +30,10 @@ config GENERIC_IRQ_LEGACY_ALLOC_HWIRQ
 config GENERIC_PENDING_IRQ
 	bool
 
+# Support for generic irq migrating off cpu before the cpu is offline.
+config GENERIC_IRQ_MIGRATION
+	bool
+
 # Alpha specific irq affinity mechanism
 config AUTO_IRQ_AFFINITY
        bool
@@ -55,6 +59,24 @@ config GENERIC_IRQ_CHIP
 config IRQ_DOMAIN
 	bool
 
+# Support for hierarchical irq domains
+config IRQ_DOMAIN_HIERARCHY
+	bool
+	select IRQ_DOMAIN
+
+# Generic MSI interrupt support
+config GENERIC_MSI_IRQ
+	bool
+
+# Generic MSI hierarchical interrupt domain support
+config GENERIC_MSI_IRQ_DOMAIN
+	bool
+	select IRQ_DOMAIN_HIERARCHY
+	select GENERIC_MSI_IRQ
+
+config HANDLE_DOMAIN_IRQ
+	bool
+
 config IRQ_DOMAIN_DEBUG
 	bool "Expose hardware/virtual IRQ mapping via debugfs"
 	depends on IRQ_DOMAIN && DEBUG_FS
@@ -68,10 +90,6 @@ config IRQ_DOMAIN_DEBUG
 # Support forced irq threading
 config IRQ_FORCED_THREADING
        bool
-
-config IRQ_FORCED_THREADING_DEFAULT
-	bool "Use IRQ threading by default"
-	depends on IRQ_FORCED_THREADING
 
 config SPARSE_IRQ
 	bool "Support sparse irq numbering" if MAY_HAVE_SPARSE_IRQ

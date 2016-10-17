@@ -265,11 +265,6 @@ struct e1000_hw_stats {
 	u64 b2ogprc;
 };
 
-struct e1000_phy_stats {
-	u32 idle_errors;
-	u32 receive_errors;
-};
-
 struct e1000_host_mng_dhcp_cookie {
 	u32 signature;
 	u8  status;
@@ -446,6 +441,7 @@ struct e1000_phy_info {
 	u16 cable_length;
 	u16 max_cable_length;
 	u16 min_cable_length;
+	u16 pair_length[4];
 
 	u8 mdix;
 

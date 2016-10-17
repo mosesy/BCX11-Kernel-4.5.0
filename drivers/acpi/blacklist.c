@@ -20,10 +20,6 @@
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *  General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License along
- *  with this program; if not, write to the Free Software Foundation, Inc.,
- *  59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
- *
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
@@ -162,6 +158,15 @@ static int __init dmi_disable_osi_win8(const struct dmi_system_id *d)
 	acpi_osi_setup("!Windows 2012");
 	return 0;
 }
+#ifdef CONFIG_ACPI_REV_OVERRIDE_POSSIBLE
+static int __init dmi_enable_rev_override(const struct dmi_system_id *d)
+{
+	printk(KERN_NOTICE PREFIX "DMI detected: %s (force ACPI _REV to 5)\n",
+	       d->ident);
+	acpi_rev_override_setup(NULL);
+	return 0;
+}
+#endif
 
 static struct dmi_system_id acpi_osi_dmi_table[] __initdata = {
 	{
@@ -215,6 +220,14 @@ static struct dmi_system_id acpi_osi_dmi_table[] __initdata = {
 	},
 	{
 	.callback = dmi_disable_osi_vista,
+	.ident = "VGN-SR19XN",
+	.matches = {
+		     DMI_MATCH(DMI_SYS_VENDOR, "Sony Corporation"),
+		     DMI_MATCH(DMI_PRODUCT_NAME, "VGN-SR19XN"),
+		},
+	},
+	{
+	.callback = dmi_disable_osi_vista,
 	.ident = "Toshiba Satellite L355",
 	.matches = {
 		     DMI_MATCH(DMI_SYS_VENDOR, "TOSHIBA"),
@@ -250,70 +263,6 @@ static struct dmi_system_id acpi_osi_dmi_table[] __initdata = {
 	 * The wireless hotkey does not work on those machines when
 	 * returning true for _OSI("Windows 2012")
 	 */
-	{
-	.callback = dmi_disable_osi_win8,
-	.ident = "ASUS Zenbook Prime UX31A",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
-		     DMI_MATCH(DMI_PRODUCT_NAME, "UX31A"),
-		},
-	},
-	{
-	.callback = dmi_disable_osi_win8,
-	.ident = "ThinkPad Edge E530",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-		     DMI_MATCH(DMI_PRODUCT_VERSION, "3259A2G"),
-		},
-	},
-	{
-	.callback = dmi_disable_osi_win8,
-	.ident = "ThinkPad Edge E530",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-		     DMI_MATCH(DMI_PRODUCT_VERSION, "3259CTO"),
-		},
-	},
-	{
-	.callback = dmi_disable_osi_win8,
-	.ident = "ThinkPad Edge E530",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-		     DMI_MATCH(DMI_PRODUCT_VERSION, "3259HJG"),
-		},
-	},
-	{
-	.callback = dmi_disable_osi_win8,
-	.ident = "Acer Aspire V5-573G",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "Acer Aspire"),
-		     DMI_MATCH(DMI_PRODUCT_VERSION, "V5-573G/Dazzle_HW"),
-		},
-	},
-	{
-	.callback = dmi_disable_osi_win8,
-	.ident = "Acer Aspire V5-572G",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "Acer Aspire"),
-		     DMI_MATCH(DMI_PRODUCT_VERSION, "V5-572G/Dazzle_CX"),
-		},
-	},
-	{
-	.callback = dmi_disable_osi_win8,
-	.ident = "ThinkPad T431s",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-		     DMI_MATCH(DMI_PRODUCT_VERSION, "20AACTO1WW"),
-		},
-	},
-	{
-	.callback = dmi_disable_osi_win8,
-	.ident = "ThinkPad T430",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-		     DMI_MATCH(DMI_PRODUCT_VERSION, "2349D15"),
-		},
-	},
 	{
 	.callback = dmi_disable_osi_win8,
 	.ident = "Dell Inspiron 7737",
@@ -364,143 +313,10 @@ static struct dmi_system_id acpi_osi_dmi_table[] __initdata = {
 	},
 
 	/*
-	 * The following Lenovo models have a broken workaround in the
-	 * acpi_video backlight implementation to meet the Windows 8
-	 * requirement of 101 backlight levels. Reverting to pre-Win8
-	 * behavior fixes the problem.
-	 */
-	{
-	.callback = dmi_disable_osi_win8,
-	.ident = "Lenovo ThinkPad L430",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-		     DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkPad L430"),
-		},
-	},
-	{
-	.callback = dmi_disable_osi_win8,
-	.ident = "Lenovo ThinkPad T430",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-		     DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkPad T430"),
-		},
-	},
-	{
-	.callback = dmi_disable_osi_win8,
-	.ident = "Lenovo ThinkPad T430s",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-		     DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkPad T430s"),
-		},
-	},
-	{
-	.callback = dmi_disable_osi_win8,
-	.ident = "Lenovo ThinkPad T530",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-		     DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkPad T530"),
-		},
-	},
-	{
-	.callback = dmi_disable_osi_win8,
-	.ident = "Lenovo ThinkPad W530",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-		     DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkPad W530"),
-		},
-	},
-	{
-	.callback = dmi_disable_osi_win8,
-	.ident = "Lenovo ThinkPad X1 Carbon",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-		     DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkPad X1 Carbon"),
-		},
-	},
-	{
-	.callback = dmi_disable_osi_win8,
-	.ident = "Lenovo ThinkPad X230",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-		     DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkPad X230"),
-		},
-	},
-	{
-	.callback = dmi_disable_osi_win8,
-	.ident = "Lenovo ThinkPad Edge E330",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-		     DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkPad Edge E330"),
-		},
-	},
-	{
-	.callback = dmi_disable_osi_win8,
-	.ident = "Dell Inspiron 5537",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
-		     DMI_MATCH(DMI_PRODUCT_NAME, "Inspiron 5537"),
-		},
-	},
-
-	/*
 	 * BIOS invocation of _OSI(Linux) is almost always a BIOS bug.
 	 * Linux ignores it, except for the machines enumerated below.
 	 */
 
-	/*
-	 * Lenovo has a mix of systems OSI(Linux) situations
-	 * and thus we can not wildcard the vendor.
-	 *
-	 * _OSI(Linux) helps sound
-	 * DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkPad R61"),
-	 * DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkPad T61"),
-	 * T400, T500
-	 * _OSI(Linux) has Linux specific hooks
-	 * DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkPad X61"),
-	 * _OSI(Linux) is a NOP:
-	 * DMI_MATCH(DMI_PRODUCT_VERSION, "3000 N100"),
-	 * DMI_MATCH(DMI_PRODUCT_VERSION, "LENOVO3000 V100"),
-	 */
-	{
-	.callback = dmi_enable_osi_linux,
-	.ident = "Lenovo ThinkPad R61",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-		     DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkPad R61"),
-		},
-	},
-	{
-	.callback = dmi_enable_osi_linux,
-	.ident = "Lenovo ThinkPad T61",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-		     DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkPad T61"),
-		},
-	},
-	{
-	.callback = dmi_enable_osi_linux,
-	.ident = "Lenovo ThinkPad X61",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-		     DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkPad X61"),
-		},
-	},
-	{
-	.callback = dmi_enable_osi_linux,
-	.ident = "Lenovo ThinkPad T400",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-		     DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkPad T400"),
-		},
-	},
-	{
-	.callback = dmi_enable_osi_linux,
-	.ident = "Lenovo ThinkPad T500",
-	.matches = {
-		     DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-		     DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkPad T500"),
-		},
-	},
 	/*
 	 * Without this this EEEpc exports a non working WMI interface, with
 	 * this it exports a working "good old" eeepc_laptop interface, fixing
@@ -514,6 +330,23 @@ static struct dmi_system_id acpi_osi_dmi_table[] __initdata = {
 		     DMI_MATCH(DMI_PRODUCT_NAME, "1015PX"),
 		},
 	},
+
+#ifdef CONFIG_ACPI_REV_OVERRIDE_POSSIBLE
+	/*
+	 * DELL XPS 13 (2015) switches sound between HDA and I2S
+	 * depending on the ACPI _REV callback. If userspace supports
+	 * I2S sufficiently (or if you do not care about sound), you
+	 * can safely disable this quirk.
+	 */
+	{
+	 .callback = dmi_enable_rev_override,
+	 .ident = "DELL XPS 13 (2015)",
+	 .matches = {
+		      DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
+		      DMI_MATCH(DMI_PRODUCT_NAME, "XPS 13 9343"),
+		},
+	},
+#endif
 	{}
 };
 

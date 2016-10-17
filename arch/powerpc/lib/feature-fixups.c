@@ -141,11 +141,8 @@ void do_final_fixups(void)
 
 	src = (int *)(KERNELBASE + PHYSICAL_START);
 	dest = (int *)KERNELBASE;
-#ifdef CONFIG_PPC_BOOK3E
-	length = (interrupt_end_book3e - _stext) / sizeof(int);
-#else
 	length = (__end_interrupts - _stext) / sizeof(int);
-#endif
+
 	while (length--) {
 		patch_instruction(dest, *src);
 		src++;
@@ -167,7 +164,7 @@ static long calc_offset(struct fixup_entry *entry, unsigned int *p)
 	return (unsigned long)p - (unsigned long)entry;
 }
 
-void test_basic_patching(void)
+static void test_basic_patching(void)
 {
 	extern unsigned int ftr_fixup_test1;
 	extern unsigned int end_ftr_fixup_test1;

@@ -42,6 +42,7 @@
 #include <linux/device.h>
 #include <linux/dmi.h>
 #include <linux/gfp.h>
+#include <linux/msi.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_cmnd.h>
 #include <linux/libata.h>
@@ -52,6 +53,7 @@
 
 enum {
 	AHCI_PCI_BAR_STA2X11	= 0,
+	AHCI_PCI_BAR_CAVIUM	= 0,
 	AHCI_PCI_BAR_ENMOTUS	= 2,
 	AHCI_PCI_BAR_STANDARD	= 5,
 };
@@ -262,6 +264,26 @@ static const struct pci_device_id ahci_pci_tbl[] = {
 	{ PCI_VDEVICE(INTEL, 0x3b2b), board_ahci }, /* PCH RAID */
 	{ PCI_VDEVICE(INTEL, 0x3b2c), board_ahci }, /* PCH RAID */
 	{ PCI_VDEVICE(INTEL, 0x3b2f), board_ahci }, /* PCH AHCI */
+	{ PCI_VDEVICE(INTEL, 0x19b0), board_ahci }, /* DNV AHCI */
+	{ PCI_VDEVICE(INTEL, 0x19b1), board_ahci }, /* DNV AHCI */
+	{ PCI_VDEVICE(INTEL, 0x19b2), board_ahci }, /* DNV AHCI */
+	{ PCI_VDEVICE(INTEL, 0x19b3), board_ahci }, /* DNV AHCI */
+	{ PCI_VDEVICE(INTEL, 0x19b4), board_ahci }, /* DNV AHCI */
+	{ PCI_VDEVICE(INTEL, 0x19b5), board_ahci }, /* DNV AHCI */
+	{ PCI_VDEVICE(INTEL, 0x19b6), board_ahci }, /* DNV AHCI */
+	{ PCI_VDEVICE(INTEL, 0x19b7), board_ahci }, /* DNV AHCI */
+	{ PCI_VDEVICE(INTEL, 0x19bE), board_ahci }, /* DNV AHCI */
+	{ PCI_VDEVICE(INTEL, 0x19bF), board_ahci }, /* DNV AHCI */
+	{ PCI_VDEVICE(INTEL, 0x19c0), board_ahci }, /* DNV AHCI */
+	{ PCI_VDEVICE(INTEL, 0x19c1), board_ahci }, /* DNV AHCI */
+	{ PCI_VDEVICE(INTEL, 0x19c2), board_ahci }, /* DNV AHCI */
+	{ PCI_VDEVICE(INTEL, 0x19c3), board_ahci }, /* DNV AHCI */
+	{ PCI_VDEVICE(INTEL, 0x19c4), board_ahci }, /* DNV AHCI */
+	{ PCI_VDEVICE(INTEL, 0x19c5), board_ahci }, /* DNV AHCI */
+	{ PCI_VDEVICE(INTEL, 0x19c6), board_ahci }, /* DNV AHCI */
+	{ PCI_VDEVICE(INTEL, 0x19c7), board_ahci }, /* DNV AHCI */
+	{ PCI_VDEVICE(INTEL, 0x19cE), board_ahci }, /* DNV AHCI */
+	{ PCI_VDEVICE(INTEL, 0x19cF), board_ahci }, /* DNV AHCI */
 	{ PCI_VDEVICE(INTEL, 0x1c02), board_ahci }, /* CPT AHCI */
 	{ PCI_VDEVICE(INTEL, 0x1c03), board_ahci }, /* CPT AHCI */
 	{ PCI_VDEVICE(INTEL, 0x1c04), board_ahci }, /* CPT RAID */
@@ -338,11 +360,28 @@ static const struct pci_device_id ahci_pci_tbl[] = {
 	{ PCI_VDEVICE(INTEL, 0x9d03), board_ahci }, /* Sunrise Point-LP AHCI */
 	{ PCI_VDEVICE(INTEL, 0x9d05), board_ahci }, /* Sunrise Point-LP RAID */
 	{ PCI_VDEVICE(INTEL, 0x9d07), board_ahci }, /* Sunrise Point-LP RAID */
+	{ PCI_VDEVICE(INTEL, 0xa102), board_ahci }, /* Sunrise Point-H AHCI */
 	{ PCI_VDEVICE(INTEL, 0xa103), board_ahci }, /* Sunrise Point-H AHCI */
-	{ PCI_VDEVICE(INTEL, 0xa103), board_ahci }, /* Sunrise Point-H RAID */
 	{ PCI_VDEVICE(INTEL, 0xa105), board_ahci }, /* Sunrise Point-H RAID */
+	{ PCI_VDEVICE(INTEL, 0xa106), board_ahci }, /* Sunrise Point-H RAID */
 	{ PCI_VDEVICE(INTEL, 0xa107), board_ahci }, /* Sunrise Point-H RAID */
 	{ PCI_VDEVICE(INTEL, 0xa10f), board_ahci }, /* Sunrise Point-H RAID */
+	{ PCI_VDEVICE(INTEL, 0x2822), board_ahci }, /* Lewisburg RAID*/
+	{ PCI_VDEVICE(INTEL, 0x2823), board_ahci }, /* Lewisburg AHCI*/
+	{ PCI_VDEVICE(INTEL, 0x2826), board_ahci }, /* Lewisburg RAID*/
+	{ PCI_VDEVICE(INTEL, 0x2827), board_ahci }, /* Lewisburg RAID*/
+	{ PCI_VDEVICE(INTEL, 0xa182), board_ahci }, /* Lewisburg AHCI*/
+	{ PCI_VDEVICE(INTEL, 0xa184), board_ahci }, /* Lewisburg RAID*/
+	{ PCI_VDEVICE(INTEL, 0xa186), board_ahci }, /* Lewisburg RAID*/
+	{ PCI_VDEVICE(INTEL, 0xa18e), board_ahci }, /* Lewisburg RAID*/
+	{ PCI_VDEVICE(INTEL, 0xa1d2), board_ahci }, /* Lewisburg RAID*/
+	{ PCI_VDEVICE(INTEL, 0xa1d6), board_ahci }, /* Lewisburg RAID*/
+	{ PCI_VDEVICE(INTEL, 0xa202), board_ahci }, /* Lewisburg AHCI*/
+	{ PCI_VDEVICE(INTEL, 0xa204), board_ahci }, /* Lewisburg RAID*/
+	{ PCI_VDEVICE(INTEL, 0xa206), board_ahci }, /* Lewisburg RAID*/
+	{ PCI_VDEVICE(INTEL, 0xa20e), board_ahci }, /* Lewisburg RAID*/
+	{ PCI_VDEVICE(INTEL, 0xa252), board_ahci }, /* Lewisburg RAID*/
+	{ PCI_VDEVICE(INTEL, 0xa256), board_ahci }, /* Lewisburg RAID*/
 
 	/* JMicron 360/1/3/5/6, match class to avoid IDE function */
 	{ PCI_VENDOR_ID_JMICRON, PCI_ANY_ID, PCI_ANY_ID, PCI_ANY_ID,
@@ -350,6 +389,7 @@ static const struct pci_device_id ahci_pci_tbl[] = {
 	/* JMicron 362B and 362C have an AHCI function with IDE class code */
 	{ PCI_VDEVICE(JMICRON, 0x2362), board_ahci_ign_iferr },
 	{ PCI_VDEVICE(JMICRON, 0x236f), board_ahci_ign_iferr },
+	/* May need to update quirk_jmicron_async_suspend() for additions */
 
 	/* ATI */
 	{ PCI_VDEVICE(ATI, 0x4380), board_ahci_sb600 }, /* ATI SB600 */
@@ -487,6 +527,8 @@ static const struct pci_device_id ahci_pci_tbl[] = {
 	  .driver_data = board_ahci_yes_fbs },			/* 88se9172 on some Gigabyte */
 	{ PCI_DEVICE(PCI_VENDOR_ID_MARVELL_EXT, 0x91a0),
 	  .driver_data = board_ahci_yes_fbs },
+	{ PCI_DEVICE(PCI_VENDOR_ID_MARVELL_EXT, 0x91a2), 	/* 88se91a2 */
+	  .driver_data = board_ahci_yes_fbs },
 	{ PCI_DEVICE(PCI_VENDOR_ID_MARVELL_EXT, 0x91a3),
 	  .driver_data = board_ahci_yes_fbs },
 	{ PCI_DEVICE(PCI_VENDOR_ID_MARVELL_EXT, 0x9230),
@@ -545,12 +587,9 @@ MODULE_PARM_DESC(marvell_enable, "Marvell SATA via AHCI (1 = enabled)");
 static void ahci_pci_save_initial_config(struct pci_dev *pdev,
 					 struct ahci_host_priv *hpriv)
 {
-	unsigned int force_port_map = 0;
-	unsigned int mask_port_map = 0;
-
 	if (pdev->vendor == PCI_VENDOR_ID_JMICRON && pdev->device == 0x2361) {
 		dev_info(&pdev->dev, "JMB361 has only one port\n");
-		force_port_map = 1;
+		hpriv->force_port_map = 1;
 	}
 
 	/*
@@ -560,15 +599,14 @@ static void ahci_pci_save_initial_config(struct pci_dev *pdev,
 	 */
 	if (hpriv->flags & AHCI_HFLAG_MV_PATA) {
 		if (pdev->device == 0x6121)
-			mask_port_map = 0x3;
+			hpriv->mask_port_map = 0x3;
 		else
-			mask_port_map = 0xf;
+			hpriv->mask_port_map = 0xf;
 		dev_info(&pdev->dev,
 			  "Disabling your PATA port. Use the boot option 'ahci.marvell_enable=0' to avoid this.\n");
 	}
 
-	ahci_save_initial_config(&pdev->dev, hpriv, force_port_map,
-				 mask_port_map);
+	ahci_save_initial_config(&pdev->dev, hpriv);
 }
 
 static int ahci_pci_reset_controller(struct ata_host *host)
@@ -830,10 +868,10 @@ static int ahci_configure_dma_masks(struct pci_dev *pdev, int using_dac)
 		return 0;
 
 	if (using_dac &&
-	    !pci_set_dma_mask(pdev, DMA_BIT_MASK(64))) {
-		rc = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(64));
+	    !dma_set_mask(&pdev->dev, DMA_BIT_MASK(64))) {
+		rc = dma_set_coherent_mask(&pdev->dev, DMA_BIT_MASK(64));
 		if (rc) {
-			rc = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(32));
+			rc = dma_set_coherent_mask(&pdev->dev, DMA_BIT_MASK(32));
 			if (rc) {
 				dev_err(&pdev->dev,
 					"64-bit DMA enable failed\n");
@@ -841,12 +879,12 @@ static int ahci_configure_dma_masks(struct pci_dev *pdev, int using_dac)
 			}
 		}
 	} else {
-		rc = pci_set_dma_mask(pdev, DMA_BIT_MASK(32));
+		rc = dma_set_mask(&pdev->dev, DMA_BIT_MASK(32));
 		if (rc) {
 			dev_err(&pdev->dev, "32-bit DMA enable failed\n");
 			return rc;
 		}
-		rc = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(32));
+		rc = dma_set_coherent_mask(&pdev->dev, DMA_BIT_MASK(32));
 		if (rc) {
 			dev_err(&pdev->dev,
 				"32-bit consistent DMA enable failed\n");
@@ -895,7 +933,7 @@ static void ahci_pci_print_info(struct ata_host *host)
  */
 static void ahci_p5wdh_workaround(struct ata_host *host)
 {
-	static struct dmi_system_id sysids[] = {
+	static const struct dmi_system_id sysids[] = {
 		{
 			.ident = "P5W DH Deluxe",
 			.matches = {
@@ -1293,17 +1331,113 @@ static inline void ahci_gtf_filter_workaround(struct ata_host *host)
 {}
 #endif
 
-static int ahci_init_interrupts(struct pci_dev *pdev, unsigned int n_ports,
-				struct ahci_host_priv *hpriv)
+#ifdef CONFIG_ARM64
+/*
+ * Due to ERRATA#22536, ThunderX needs to handle HOST_IRQ_STAT differently.
+ * Workaround is to make sure all pending IRQs are served before leaving
+ * handler.
+ */
+static irqreturn_t ahci_thunderx_irq_handler(int irq, void *dev_instance)
+{
+	struct ata_host *host = dev_instance;
+	struct ahci_host_priv *hpriv;
+	unsigned int rc = 0;
+	void __iomem *mmio;
+	u32 irq_stat, irq_masked;
+	unsigned int handled = 1;
+
+	VPRINTK("ENTER\n");
+	hpriv = host->private_data;
+	mmio = hpriv->mmio;
+	irq_stat = readl(mmio + HOST_IRQ_STAT);
+	if (!irq_stat)
+		return IRQ_NONE;
+
+	do {
+		irq_masked = irq_stat & hpriv->port_map;
+		spin_lock(&host->lock);
+		rc = ahci_handle_port_intr(host, irq_masked);
+		if (!rc)
+			handled = 0;
+		writel(irq_stat, mmio + HOST_IRQ_STAT);
+		irq_stat = readl(mmio + HOST_IRQ_STAT);
+		spin_unlock(&host->lock);
+	} while (irq_stat);
+	VPRINTK("EXIT\n");
+
+	return IRQ_RETVAL(handled);
+}
+#endif
+
+/*
+ * ahci_init_msix() - optionally enable per-port MSI-X otherwise defer
+ * to single msi.
+ */
+static int ahci_init_msix(struct pci_dev *pdev, unsigned int n_ports,
+			  struct ahci_host_priv *hpriv, unsigned long flags)
+{
+	int nvec, i, rc;
+
+	/* Do not init MSI-X if MSI is disabled for the device */
+	if (hpriv->flags & AHCI_HFLAG_NO_MSI)
+		return -ENODEV;
+
+	nvec = pci_msix_vec_count(pdev);
+	if (nvec < 0)
+		return nvec;
+
+	/*
+	 * Proper MSI-X implementations will have a vector per-port.
+	 * Barring that, we prefer single-MSI over single-MSIX.  If this
+	 * check fails (not enough MSI-X vectors for all ports) we will
+	 * be called again with the flag clear iff ahci_init_msi()
+	 * fails.
+	 */
+	if (flags & AHCI_HFLAG_MULTI_MSIX) {
+		if (nvec < n_ports)
+			return -ENODEV;
+		nvec = n_ports;
+	} else if (nvec) {
+		nvec = 1;
+	} else {
+		/*
+		 * Emit dev_err() since this was the non-legacy irq
+		 * method of last resort.
+		 */
+		rc = -ENODEV;
+		goto fail;
+	}
+
+	for (i = 0; i < nvec; i++)
+		hpriv->msix[i].entry = i;
+	rc = pci_enable_msix_exact(pdev, hpriv->msix, nvec);
+	if (rc < 0)
+		goto fail;
+
+	if (nvec > 1)
+		hpriv->flags |= AHCI_HFLAG_MULTI_MSIX;
+	hpriv->irq = hpriv->msix[0].vector; /* for single msi-x */
+
+	return nvec;
+fail:
+	dev_err(&pdev->dev,
+		"failed to enable MSI-X with error %d, # of vectors: %d\n",
+		rc, nvec);
+
+	return rc;
+}
+
+static int ahci_init_msi(struct pci_dev *pdev, unsigned int n_ports,
+			struct ahci_host_priv *hpriv)
 {
 	int rc, nvec;
 
 	if (hpriv->flags & AHCI_HFLAG_NO_MSI)
-		goto intx;
+		return -ENODEV;
 
 	nvec = pci_msi_vec_count(pdev);
 	if (nvec < 0)
-		goto intx;
+		return nvec;
 
 	/*
 	 * If number of MSIs is less than number of ports then Sharing Last
@@ -1316,8 +1450,8 @@ static int ahci_init_interrupts(struct pci_dev *pdev, unsigned int n_ports,
 	rc = pci_enable_msi_exact(pdev, nvec);
 	if (rc == -ENOSPC)
 		goto single_msi;
-	else if (rc < 0)
-		goto intx;
+	if (rc < 0)
+		return rc;
 
 	/* fallback to single MSI mode if the controller enforced MRSM mode */
 	if (readl(hpriv->mmio + HOST_CTL) & HOST_MRSM) {
@@ -1326,81 +1460,51 @@ static int ahci_init_interrupts(struct pci_dev *pdev, unsigned int n_ports,
 		goto single_msi;
 	}
 
-	return nvec;
+	if (nvec > 1)
+		hpriv->flags |= AHCI_HFLAG_MULTI_MSI;
+
+	goto out;
 
 single_msi:
-	if (pci_enable_msi(pdev))
-		goto intx;
-	return 1;
+	nvec = 1;
 
-intx:
-	pci_intx(pdev, 1);
-	return 0;
+	rc = pci_enable_msi(pdev);
+	if (rc < 0)
+		return rc;
+out:
+	hpriv->irq = pdev->irq;
+
+	return nvec;
 }
 
-/**
- *	ahci_host_activate - start AHCI host, request IRQs and register it
- *	@host: target ATA host
- *	@irq: base IRQ number to request
- *	@n_msis: number of MSIs allocated for this host
- *	@irq_handler: irq_handler used when requesting IRQs
- *	@irq_flags: irq_flags used when requesting IRQs
- *
- *	Similar to ata_host_activate, but requests IRQs according to AHCI-1.1
- *	when multiple MSIs were allocated. That is one MSI per port, starting
- *	from @irq.
- *
- *	LOCKING:
- *	Inherited from calling layer (may sleep).
- *
- *	RETURNS:
- *	0 on success, -errno otherwise.
- */
-int ahci_host_activate(struct ata_host *host, int irq, unsigned int n_msis)
+static int ahci_init_interrupts(struct pci_dev *pdev, unsigned int n_ports,
+				struct ahci_host_priv *hpriv)
 {
-	int i, rc;
+	int nvec;
 
-	/* Sharing Last Message among several ports is not supported */
-	if (n_msis < host->n_ports)
-		return -EINVAL;
+	/*
+	 * Try to enable per-port MSI-X.  If the host is not capable
+	 * fall back to single MSI before finally attempting single
+	 * MSI-X.
+	 */
+	nvec = ahci_init_msix(pdev, n_ports, hpriv, AHCI_HFLAG_MULTI_MSIX);
+	if (nvec >= 0)
+		return nvec;
 
-	rc = ata_host_start(host);
-	if (rc)
-		return rc;
+	nvec = ahci_init_msi(pdev, n_ports, hpriv);
+	if (nvec >= 0)
+		return nvec;
 
-	for (i = 0; i < host->n_ports; i++) {
-		struct ahci_port_priv *pp = host->ports[i]->private_data;
+	/* try single-msix */
+	nvec = ahci_init_msix(pdev, n_ports, hpriv, 0);
+	if (nvec >= 0)
+		return nvec;
 
-		/* Do not receive interrupts sent by dummy ports */
-		if (!pp) {
-			disable_irq(irq + i);
-			continue;
-		}
-
-		rc = devm_request_threaded_irq(host->dev, irq + i,
-					       ahci_hw_interrupt,
-					       ahci_thread_fn, IRQF_SHARED,
-					       pp->irq_desc, host->ports[i]);
-		if (rc)
-			goto out_free_irqs;
-	}
-
-	for (i = 0; i < host->n_ports; i++)
-		ata_port_desc(host->ports[i], "irq %d", irq + i);
-
-	rc = ata_host_register(host, &ahci_sht);
-	if (rc)
-		goto out_free_all_irqs;
+	/* legacy intx interrupts */
+	pci_intx(pdev, 1);
+	hpriv->irq = pdev->irq;
 
 	return 0;
-
-out_free_all_irqs:
-	i = host->n_ports;
-out_free_irqs:
-	for (i--; i >= 0; i--)
-		devm_free_irq(host->dev, irq + i, host->ports[i]);
-
-	return rc;
 }
 
 static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
@@ -1411,7 +1515,7 @@ static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct device *dev = &pdev->dev;
 	struct ahci_host_priv *hpriv;
 	struct ata_host *host;
-	int n_ports, n_msis, i, rc;
+	int n_ports, i, rc;
 	int ahci_pci_bar = AHCI_PCI_BAR_STANDARD;
 
 	VPRINTK("ENTER\n");
@@ -1438,11 +1542,13 @@ static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		dev_info(&pdev->dev,
 			 "PDC42819 can only drive SATA devices with this driver\n");
 
-	/* Both Connext and Enmotus devices use non-standard BARs */
+	/* Some devices use non-standard BARs */
 	if (pdev->vendor == PCI_VENDOR_ID_STMICRO && pdev->device == 0xCC06)
 		ahci_pci_bar = AHCI_PCI_BAR_STA2X11;
 	else if (pdev->vendor == 0x1c44 && pdev->device == 0x8000)
 		ahci_pci_bar = AHCI_PCI_BAR_ENMOTUS;
+	else if (pdev->vendor == 0x177d && pdev->device == 0xa01c)
+		ahci_pci_bar = AHCI_PCI_BAR_CAVIUM;
 
 	/* acquire resources */
 	rc = pcim_enable_device(pdev);
@@ -1498,6 +1604,11 @@ static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (ahci_broken_devslp(pdev))
 		hpriv->flags |= AHCI_HFLAG_NO_DEVSLP;
 
+#ifdef CONFIG_ARM64
+	if (pdev->vendor == 0x177d && pdev->device == 0xa01c)
+		hpriv->irq_handler = ahci_thunderx_irq_handler;
+#endif
+
 	/* save initial config */
 	ahci_pci_save_initial_config(pdev, hpriv);
 
@@ -1552,14 +1663,15 @@ static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	 */
 	n_ports = max(ahci_nr_ports(hpriv->cap), fls(hpriv->port_map));
 
-	n_msis = ahci_init_interrupts(pdev, n_ports, hpriv);
-	if (n_msis > 1)
-		hpriv->flags |= AHCI_HFLAG_MULTI_MSI;
-
 	host = ata_host_alloc_pinfo(&pdev->dev, ppi, n_ports);
 	if (!host)
 		return -ENOMEM;
 	host->private_data = hpriv;
+	hpriv->msix = devm_kzalloc(&pdev->dev,
+			sizeof(struct msix_entry) * n_ports, GFP_KERNEL);
+	if (!hpriv->msix)
+		return -ENOMEM;
+	ahci_init_interrupts(pdev, n_ports, hpriv);
 
 	if (!(hpriv->cap & HOST_CAP_SSS) || ahci_ignore_sss)
 		host->flags |= ATA_HOST_PARALLEL_SCAN;
@@ -1606,11 +1718,7 @@ static int ahci_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	pci_set_master(pdev);
 
-	if (hpriv->flags & AHCI_HFLAG_MULTI_MSI)
-		return ahci_host_activate(host, pdev->irq, n_msis);
-
-	return ata_host_activate(host, pdev->irq, ahci_interrupt, IRQF_SHARED,
-				 &ahci_sht);
+	return ahci_host_activate(host, &ahci_sht);
 }
 
 module_pci_driver(ahci_pci_driver);

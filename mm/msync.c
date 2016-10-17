@@ -9,7 +9,6 @@
  */
 #include <linux/fs.h>
 #include <linux/mm.h>
-#include <linux/mmfile.h>
 #include <linux/mman.h>
 #include <linux/file.h>
 #include <linux/syscalls.h>
@@ -39,7 +38,7 @@ SYSCALL_DEFINE3(msync, unsigned long, start, size_t, len, int, flags)
 
 	if (flags & ~(MS_ASYNC | MS_INVALIDATE | MS_SYNC))
 		goto out;
-	if (start & ~PAGE_MASK)
+	if (offset_in_page(start))
 		goto out;
 	if ((flags & MS_ASYNC) && (flags & MS_SYNC))
 		goto out;
@@ -85,13 +84,10 @@ SYSCALL_DEFINE3(msync, unsigned long, start, size_t, len, int, flags)
 		start = vma->vm_end;
 		if ((flags & MS_SYNC) && file &&
 				(vma->vm_flags & VM_SHARED)) {
-			vma_get_file(vma);
+			get_file(file);
 			up_read(&mm->mmap_sem);
-			if (vma->vm_flags & VM_NONLINEAR)
-				error = vfs_fsync(file, 1);
-			else
-				error = vfs_fsync_range(file, fstart, fend, 1);
-			vma_fput(vma);
+			error = vfs_fsync_range(file, fstart, fend, 1);
+			fput(file);
 			if (error || start >= end)
 				goto out;
 			down_read(&mm->mmap_sem);

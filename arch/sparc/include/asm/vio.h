@@ -65,6 +65,7 @@ struct vio_dring_register {
 	u16			options;
 #define VIO_TX_DRING		0x0001
 #define VIO_RX_DRING		0x0002
+#define VIO_RX_DRING_DATA	0x0004
 	u16			resv;
 	u32			num_cookies;
 	struct ldc_trans_cookie	cookies[0];
@@ -80,6 +81,8 @@ struct vio_dring_unregister {
 #define VIO_PKT_MODE		0x01 /* Packet based transfer	*/
 #define VIO_DESC_MODE		0x02 /* In-band descriptors	*/
 #define VIO_DRING_MODE		0x03 /* Descriptor rings	*/
+/* in vers >= 1.2, VIO_DRING_MODE is 0x04 and transfer mode is a bitmask */
+#define VIO_NEW_DRING_MODE	0x04
 
 struct vio_dring_data {
 	struct vio_msg_tag	tag;
@@ -211,10 +214,20 @@ struct vio_net_attr_info {
 	u8			addr_type;
 #define VNET_ADDR_ETHERMAC	0x01
 	u16			ack_freq;
-	u32			resv1;
+	u8			plnk_updt;
+#define PHYSLINK_UPDATE_NONE		0x00
+#define PHYSLINK_UPDATE_STATE		0x01
+#define PHYSLINK_UPDATE_STATE_ACK	0x02
+#define PHYSLINK_UPDATE_STATE_NACK	0x03
+	u8			options;
+	u16			resv1;
 	u64			addr;
 	u64			mtu;
-	u64			resv2[3];
+	u16			cflags;
+#define VNET_LSO_IPV4_CAPAB		0x0001
+	u16			ipv4_lso_maxlen;
+	u32			resv2;
+	u64			resv3[2];
 };
 
 #define VNET_NUM_MCAST		7
@@ -233,6 +246,25 @@ struct vio_net_desc {
 	u32			ncookies;
 	struct ldc_trans_cookie	cookies[0];
 };
+
+struct vio_net_dext {
+	u8		flags;
+#define VNET_PKT_HASH			0x01
+#define	VNET_PKT_HCK_IPV4_HDRCKSUM	0x02
+#define	VNET_PKT_HCK_FULLCKSUM		0x04
+#define	VNET_PKT_IPV4_LSO		0x08
+#define	VNET_PKT_HCK_IPV4_HDRCKSUM_OK	0x10
+#define	VNET_PKT_HCK_FULLCKSUM_OK	0x20
+
+	u8		vnet_hashval;
+	u16		ipv4_lso_mss;
+	u32		resv3;
+};
+
+static inline struct vio_net_dext *vio_net_ext(struct vio_net_desc *desc)
+{
+	return (struct vio_net_dext *)&desc->cookies[2];
+}
 
 #define VIO_MAX_RING_COOKIES	24
 
@@ -268,6 +300,21 @@ static inline u32 vio_dring_avail(struct vio_dring_state *dr,
 		((dr->prod - dr->cons) & (ring_size - 1)) - 1);
 }
 
+static inline u32 vio_dring_next(struct vio_dring_state *dr, u32 index)
+{
+	if (++index == dr->num_entries)
+		index = 0;
+	return index;
+}
+
+static inline u32 vio_dring_prev(struct vio_dring_state *dr, u32 index)
+{
+	if (index == 0)
+		return dr->num_entries - 1;
+	else
+		return index - 1;
+}
+
 #define VIO_MAX_TYPE_LEN	32
 #define VIO_MAX_COMPAT_LEN	64
 
@@ -285,6 +332,7 @@ struct vio_dev {
 
 	unsigned int		tx_irq;
 	unsigned int		rx_irq;
+	u64			rx_ino;
 
 	struct device		dev;
 };
@@ -372,6 +420,33 @@ struct vio_driver_state {
 	struct vio_driver_ops	*ops;
 };
 
+static inline bool vio_version_before(struct vio_driver_state *vio,
+				      u16 major, u16 minor)
+{
+	u32 have = (u32)vio->ver.major << 16 | vio->ver.minor;
+	u32 want = (u32)major << 16 | minor;
+
+	return have < want;
+}
+
+static inline bool vio_version_after(struct vio_driver_state *vio,
+				      u16 major, u16 minor)
+{
+	u32 have = (u32)vio->ver.major << 16 | vio->ver.minor;
+	u32 want = (u32)major << 16 | minor;
+
+	return have > want;
+}
+
+static inline bool vio_version_after_eq(struct vio_driver_state *vio,
+					u16 major, u16 minor)
+{
+	u32 have = (u32)vio->ver.major << 16 | vio->ver.minor;
+	u32 want = (u32)major << 16 | minor;
+
+	return have >= want;
+}
+
 #define viodbg(TYPE, f, a...) \
 do {	if (vio->debug & VIO_DEBUG_##TYPE) \
 		printk(KERN_INFO "vio: ID[%lu] " f, \
@@ -413,5 +488,6 @@ int vio_driver_init(struct vio_driver_state *vio, struct vio_dev *vdev,
 		    char *name);
 
 void vio_port_up(struct vio_driver_state *vio);
+int vio_set_intr(unsigned long dev_ino, int state);
 
 #endif /* _SPARC64_VIO_H */

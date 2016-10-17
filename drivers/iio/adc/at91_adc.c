@@ -182,7 +182,7 @@ struct at91_adc_caps {
 	u8	ts_pen_detect_sensitivity;
 
 	/* startup time calculate function */
-	u32 (*calc_startup_ticks)(u8 startup_time, u32 adc_clk_khz);
+	u32 (*calc_startup_ticks)(u32 startup_time, u32 adc_clk_khz);
 
 	u8	num_channels;
 	struct at91_adc_reg_desc registers;
@@ -201,7 +201,7 @@ struct at91_adc_state {
 	u8			num_channels;
 	void __iomem		*reg_base;
 	struct at91_adc_reg_desc *registers;
-	u8			startup_time;
+	u32			startup_time;
 	u8			sample_hold_time;
 	bool			sleep_mode;
 	struct iio_trigger	**trig;
@@ -267,13 +267,13 @@ static irqreturn_t at91_adc_trigger_handler(int irq, void *p)
 }
 
 /* Handler for classic adc channel eoc trigger */
-void handle_adc_eoc_trigger(int irq, struct iio_dev *idev)
+static void handle_adc_eoc_trigger(int irq, struct iio_dev *idev)
 {
 	struct at91_adc_state *st = iio_priv(idev);
 
 	if (iio_buffer_enabled(idev)) {
 		disable_irq_nosync(irq);
-		iio_trigger_poll(idev->trig, iio_get_time_ns());
+		iio_trigger_poll(idev->trig);
 	} else {
 		st->last_value = at91_adc_readl(st, AT91_ADC_CHAN(st, st->chnb));
 		st->done = true;
@@ -742,7 +742,7 @@ static int at91_adc_of_get_resolution(struct at91_adc_state *st,
 		return count;
 	}
 
-	resolutions = kmalloc(count * sizeof(*resolutions), GFP_KERNEL);
+	resolutions = kmalloc_array(count, sizeof(*resolutions), GFP_KERNEL);
 	if (!resolutions)
 		return -ENOMEM;
 
@@ -779,7 +779,7 @@ ret:
 	return ret;
 }
 
-static u32 calc_startup_ticks_9260(u8 startup_time, u32 adc_clk_khz)
+static u32 calc_startup_ticks_9260(u32 startup_time, u32 adc_clk_khz)
 {
 	/*
 	 * Number of ticks needed to cover the startup time of the ADC
@@ -790,7 +790,7 @@ static u32 calc_startup_ticks_9260(u8 startup_time, u32 adc_clk_khz)
 	return round_up((startup_time * adc_clk_khz / 1000) - 1, 8) / 8;
 }
 
-static u32 calc_startup_ticks_9x5(u8 startup_time, u32 adc_clk_khz)
+static u32 calc_startup_ticks_9x5(u32 startup_time, u32 adc_clk_khz)
 {
 	/*
 	 * For sama5d3x and at91sam9x5, the formula changes to:

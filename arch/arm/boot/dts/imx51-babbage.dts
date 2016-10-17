@@ -192,6 +192,7 @@
 		reg = <0>;
 		interrupt-parent = <&gpio1>;
 		interrupts = <8 IRQ_TYPE_LEVEL_HIGH>;
+		fsl,mc13xxx-uses-rtc;
 
 		regulators {
 			sw1_reg: sw1 {
@@ -381,7 +382,6 @@
 };
 
 &ssi2 {
-	fsl,mode = "i2s-slave";
 	status = "okay";
 };
 

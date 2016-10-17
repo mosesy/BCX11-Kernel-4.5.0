@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/bitmap.h>
+#include <linux/bootmem.h>
 #include <asm/msi_bitmap.h>
 #include <asm/setup.h>
 
@@ -111,7 +112,7 @@ int msi_bitmap_reserve_dt_hwirqs(struct msi_bitmap *bmp)
 	return 0;
 }
 
-int msi_bitmap_alloc(struct msi_bitmap *bmp, unsigned int irq_count,
+int __init_refok msi_bitmap_alloc(struct msi_bitmap *bmp, unsigned int irq_count,
 		     struct device_node *of_node)
 {
 	int size;
@@ -122,7 +123,15 @@ int msi_bitmap_alloc(struct msi_bitmap *bmp, unsigned int irq_count,
 	size = BITS_TO_LONGS(irq_count) * sizeof(long);
 	pr_debug("msi_bitmap: allocator bitmap size is 0x%x bytes\n", size);
 
-	bmp->bitmap = zalloc_maybe_bootmem(size, GFP_KERNEL);
+	bmp->bitmap_from_slab = slab_is_available();
+	if (bmp->bitmap_from_slab)
+		bmp->bitmap = kzalloc(size, GFP_KERNEL);
+	else {
+		bmp->bitmap = memblock_virt_alloc(size, 0);
+		/* the bitmap won't be freed from memblock allocator */
+		kmemleak_not_leak(bmp->bitmap);
+	}
+
 	if (!bmp->bitmap) {
 		pr_debug("msi_bitmap: ENOMEM allocating allocator bitmap!\n");
 		return -ENOMEM;
@@ -138,71 +147,75 @@ int msi_bitmap_alloc(struct msi_bitmap *bmp, unsigned int irq_count,
 
 void msi_bitmap_free(struct msi_bitmap *bmp)
 {
-	/* we can't free the bitmap we don't know if it's bootmem etc. */
+	if (bmp->bitmap_from_slab)
+		kfree(bmp->bitmap);
 	of_node_put(bmp->of_node);
 	bmp->bitmap = NULL;
 }
 
 #ifdef CONFIG_MSI_BITMAP_SELFTEST
 
-#define check(x)	\
-	if (!(x)) printk("msi_bitmap: test failed at line %d\n", __LINE__);
-
-void __init test_basics(void)
+static void __init test_basics(void)
 {
 	struct msi_bitmap bmp;
-	int i, size = 512;
+	int rc, i, size = 512;
 
 	/* Can't allocate a bitmap of 0 irqs */
-	check(msi_bitmap_alloc(&bmp, 0, NULL) != 0);
+	WARN_ON(msi_bitmap_alloc(&bmp, 0, NULL) == 0);
 
 	/* of_node may be NULL */
-	check(0 == msi_bitmap_alloc(&bmp, size, NULL));
+	WARN_ON(msi_bitmap_alloc(&bmp, size, NULL));
 
 	/* Should all be free by default */
-	check(0 == bitmap_find_free_region(bmp.bitmap, size,
-					   get_count_order(size)));
+	WARN_ON(bitmap_find_free_region(bmp.bitmap, size, get_count_order(size)));
 	bitmap_release_region(bmp.bitmap, 0, get_count_order(size));
 
 	/* With no node, there's no msi-available-ranges, so expect > 0 */
-	check(msi_bitmap_reserve_dt_hwirqs(&bmp) > 0);
+	WARN_ON(msi_bitmap_reserve_dt_hwirqs(&bmp) <= 0);
 
 	/* Should all still be free */
-	check(0 == bitmap_find_free_region(bmp.bitmap, size,
-					   get_count_order(size)));
+	WARN_ON(bitmap_find_free_region(bmp.bitmap, size, get_count_order(size)));
 	bitmap_release_region(bmp.bitmap, 0, get_count_order(size));
 
 	/* Check we can fill it up and then no more */
 	for (i = 0; i < size; i++)
-		check(msi_bitmap_alloc_hwirqs(&bmp, 1) >= 0);
+		WARN_ON(msi_bitmap_alloc_hwirqs(&bmp, 1) < 0);
 
-	check(msi_bitmap_alloc_hwirqs(&bmp, 1) < 0);
+	WARN_ON(msi_bitmap_alloc_hwirqs(&bmp, 1) >= 0);
 
 	/* Should all be allocated */
-	check(bitmap_find_free_region(bmp.bitmap, size, 0) < 0);
+	WARN_ON(bitmap_find_free_region(bmp.bitmap, size, 0) >= 0);
 
 	/* And if we free one we can then allocate another */
 	msi_bitmap_free_hwirqs(&bmp, size / 2, 1);
-	check(msi_bitmap_alloc_hwirqs(&bmp, 1) == size / 2);
+	WARN_ON(msi_bitmap_alloc_hwirqs(&bmp, 1) != size / 2);
+
+	/* Free most of them for the alignment tests */
+	msi_bitmap_free_hwirqs(&bmp, 3, size - 3);
 
 	/* Check we get a naturally aligned offset */
-	check(msi_bitmap_alloc_hwirqs(&bmp, 2) % 2 == 0);
-	check(msi_bitmap_alloc_hwirqs(&bmp, 4) % 4 == 0);
-	check(msi_bitmap_alloc_hwirqs(&bmp, 8) % 8 == 0);
-	check(msi_bitmap_alloc_hwirqs(&bmp, 9) % 16 == 0);
-	check(msi_bitmap_alloc_hwirqs(&bmp, 3) % 4 == 0);
-	check(msi_bitmap_alloc_hwirqs(&bmp, 7) % 8 == 0);
-	check(msi_bitmap_alloc_hwirqs(&bmp, 121) % 128 == 0);
+	rc = msi_bitmap_alloc_hwirqs(&bmp, 2);
+	WARN_ON(rc < 0 && rc % 2 != 0);
+	rc = msi_bitmap_alloc_hwirqs(&bmp, 4);
+	WARN_ON(rc < 0 && rc % 4 != 0);
+	rc = msi_bitmap_alloc_hwirqs(&bmp, 8);
+	WARN_ON(rc < 0 && rc % 8 != 0);
+	rc = msi_bitmap_alloc_hwirqs(&bmp, 9);
+	WARN_ON(rc < 0 && rc % 16 != 0);
+	rc = msi_bitmap_alloc_hwirqs(&bmp, 3);
+	WARN_ON(rc < 0 && rc % 4 != 0);
+	rc = msi_bitmap_alloc_hwirqs(&bmp, 7);
+	WARN_ON(rc < 0 && rc % 8 != 0);
+	rc = msi_bitmap_alloc_hwirqs(&bmp, 121);
+	WARN_ON(rc < 0 && rc % 128 != 0);
 
 	msi_bitmap_free(&bmp);
 
-	/* Clients may check bitmap == NULL for "not-allocated" */
-	check(bmp.bitmap == NULL);
-
-	kfree(bmp.bitmap);
+	/* Clients may WARN_ON bitmap == NULL for "not-allocated" */
+	WARN_ON(bmp.bitmap != NULL);
 }
 
-void __init test_of_node(void)
+static void __init test_of_node(void)
 {
 	u32 prop_data[] = { 10, 10, 25, 3, 40, 1, 100, 100, 200, 20 };
 	const char *expected_str = "0-9,20-24,28-39,41-99,220-255";
@@ -219,14 +232,13 @@ void __init test_of_node(void)
 	of_node_init(&of_node);
 	of_node.full_name = node_name;
 
-	check(0 == msi_bitmap_alloc(&bmp, size, &of_node));
+	WARN_ON(msi_bitmap_alloc(&bmp, size, &of_node));
 
 	/* No msi-available-ranges, so expect > 0 */
-	check(msi_bitmap_reserve_dt_hwirqs(&bmp) > 0);
+	WARN_ON(msi_bitmap_reserve_dt_hwirqs(&bmp) <= 0);
 
 	/* Should all still be free */
-	check(0 == bitmap_find_free_region(bmp.bitmap, size,
-					   get_count_order(size)));
+	WARN_ON(bitmap_find_free_region(bmp.bitmap, size, get_count_order(size)));
 	bitmap_release_region(bmp.bitmap, 0, get_count_order(size));
 
 	/* Now create a fake msi-available-ranges property */
@@ -240,17 +252,17 @@ void __init test_of_node(void)
 	of_node.properties = &prop;
 
 	/* msi-available-ranges, so expect == 0 */
-	check(msi_bitmap_reserve_dt_hwirqs(&bmp) == 0);
+	WARN_ON(msi_bitmap_reserve_dt_hwirqs(&bmp));
 
 	/* Check we got the expected result */
-	check(0 == bitmap_parselist(expected_str, expected, size));
-	check(bitmap_equal(expected, bmp.bitmap, size));
+	WARN_ON(bitmap_parselist(expected_str, expected, size));
+	WARN_ON(!bitmap_equal(expected, bmp.bitmap, size));
 
 	msi_bitmap_free(&bmp);
 	kfree(bmp.bitmap);
 }
 
-int __init msi_bitmap_selftest(void)
+static int __init msi_bitmap_selftest(void)
 {
 	printk(KERN_DEBUG "Running MSI bitmap self-tests ...\n");
 

@@ -51,7 +51,7 @@ static const struct devs_id tca6416_dev_id __initconst = {
 	.name = "tca6416",
 	.type = SFI_DEV_TYPE_I2C,
 	.delay = 1,
-//	.get_platform_data = &tca6416_platform_data,
+	.get_platform_data = &tca6416_platform_data,
 };
 
 sfi_device(tca6416_dev_id);

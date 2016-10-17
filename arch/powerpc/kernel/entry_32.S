@@ -20,6 +20,7 @@
  */
 
 #include <linux/errno.h>
+#include <linux/err.h>
 #include <linux/sys.h>
 #include <linux/threads.h>
 #include <asm/reg.h>
@@ -331,7 +332,7 @@ _GLOBAL(DoSyscall)
 #endif /* CONFIG_TRACE_IRQFLAGS */
 	CURRENT_THREAD_INFO(r10, r1)
 	lwz	r11,TI_FLAGS(r10)
-	andi.	r11,r11,_TIF_SYSCALL_T_OR_A
+	andi.	r11,r11,_TIF_SYSCALL_DOTRACE
 	bne-	syscall_dotrace
 syscall_dotrace_cont:
 	cmplwi	0,r0,NR_syscalls
@@ -354,8 +355,8 @@ ret_from_syscall:
 	SYNC
 	MTMSRD(r10)
 	lwz	r9,TI_FLAGS(r12)
-	li	r8,-_LAST_ERRNO
-	andi.	r0,r9,(_TIF_SYSCALL_T_OR_A|_TIF_SINGLESTEP|_TIF_USER_WORK_MASK|_TIF_PERSYSCALL_MASK)
+	li	r8,-MAX_ERRNO
+	andi.	r0,r9,(_TIF_SYSCALL_DOTRACE|_TIF_SINGLESTEP|_TIF_USER_WORK_MASK|_TIF_PERSYSCALL_MASK)
 	bne-	syscall_exit_work
 	cmplw	0,r3,r8
 	blt+	syscall_exit_cont
@@ -457,6 +458,10 @@ syscall_dotrace:
 	lwz	r7,GPR7(r1)
 	lwz	r8,GPR8(r1)
 	REST_NVGPRS(r1)
+
+	cmplwi	r0,NR_syscalls
+	/* Return code is already in r3 thanks to do_syscall_trace_enter() */
+	bge-	ret_from_syscall
 	b	syscall_dotrace_cont
 
 syscall_exit_work:
@@ -492,7 +497,7 @@ syscall_exit_work:
 	subi	r12,r12,TI_FLAGS
 	
 4:	/* Anything which requires enabling interrupts? */
-	andi.	r0,r9,(_TIF_SYSCALL_T_OR_A|_TIF_SINGLESTEP)
+	andi.	r0,r9,(_TIF_SYSCALL_DOTRACE|_TIF_SINGLESTEP)
 	beq	ret_from_except
 
 	/* Re-enable interrupts. There is no need to trace that with
@@ -1347,11 +1352,17 @@ _GLOBAL(ftrace_graph_caller)
 	lwz	r4, 44(r1)
 	subi	r4, r4, MCOUNT_INSN_SIZE
 
-	/* get the parent address */
-	addi	r3, r1, 52
+	/* Grab the LR out of the caller stack frame */
+	lwz	r3,52(r1)
 
 	bl	prepare_ftrace_return
 	nop
+
+        /*
+         * prepare_ftrace_return gives us the address we divert to.
+         * Change the LR in the callers stack frame to this.
+         */
+	stw	r3,52(r1)
 
 	MCOUNT_RESTORE_FRAME
 	/* old link register ends up in ctr reg */
@@ -1380,4 +1391,4 @@ _GLOBAL(return_to_handler)
 	blr
 #endif /* CONFIG_FUNCTION_GRAPH_TRACER */
 
-#endif /* CONFIG_MCOUNT */
+#endif /* CONFIG_FUNCTION_TRACER */

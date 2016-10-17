@@ -36,6 +36,8 @@
 #include <drm/ttm/ttm_memory.h>
 #include <drm/ttm/ttm_module.h>
 
+#include <drm/drm_gem.h>
+
 #include <linux/i2c.h>
 #include <linux/i2c-algo-bit.h>
 
@@ -254,7 +256,6 @@ struct ast_framebuffer {
 struct ast_fbdev {
 	struct drm_fb_helper helper;
 	struct ast_framebuffer afb;
-	struct list_head fbdev_list;
 	void *sysram;
 	int size;
 	struct ttm_bo_kmap_obj mapping;
@@ -307,19 +308,20 @@ extern void ast_mode_fini(struct drm_device *dev);
 
 int ast_framebuffer_init(struct drm_device *dev,
 			 struct ast_framebuffer *ast_fb,
-			 struct drm_mode_fb_cmd2 *mode_cmd,
+			 const struct drm_mode_fb_cmd2 *mode_cmd,
 			 struct drm_gem_object *obj);
 
 int ast_fbdev_init(struct drm_device *dev);
 void ast_fbdev_fini(struct drm_device *dev);
 void ast_fbdev_set_suspend(struct drm_device *dev, int state);
+void ast_fbdev_set_base(struct ast_private *ast, unsigned long gpu_addr);
 
 struct ast_bo {
 	struct ttm_buffer_object bo;
 	struct ttm_placement placement;
 	struct ttm_bo_kmap_obj kmap;
 	struct drm_gem_object gem;
-	u32 placements[3];
+	struct ttm_place placements[3];
 	int pin_count;
 };
 #define gem_to_ast_bo(gobj) container_of((gobj), struct ast_bo, gem)
@@ -365,7 +367,7 @@ static inline int ast_bo_reserve(struct ast_bo *bo, bool no_wait)
 {
 	int ret;
 
-	ret = ttm_bo_reserve(&bo->bo, true, no_wait, false, 0);
+	ret = ttm_bo_reserve(&bo->bo, true, no_wait, false, NULL);
 	if (ret) {
 		if (ret != -ERESTARTSYS && ret != -EBUSY)
 			DRM_ERROR("reserve failed %p\n", bo);

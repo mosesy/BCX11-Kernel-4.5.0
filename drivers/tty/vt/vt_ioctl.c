@@ -388,7 +388,7 @@ int vt_ioctl(struct tty_struct *tty,
 		 * Generate the tone for the appropriate number of ticks.
 		 * If the time is zero, turn off sound ourselves.
 		 */
-		ticks = HZ * ((arg >> 16) & 0xffff) / 1000;
+		ticks = msecs_to_jiffies((arg >> 16) & 0xffff);
 		count = ticks ? (arg & 0xffff) : 0;
 		if (count)
 			count = PIT_TICK_RATE / count;
@@ -1046,9 +1046,9 @@ out:
 	return ret;
 }
 
-void reset_vc(struct vc_data *vc, int mode)
+void reset_vc(struct vc_data *vc)
 {
-	vc->vc_mode = mode;
+	vc->vc_mode = KD_TEXT;
 	vt_reset_unicode(vc->vc_num);
 	vc->vt_mode.mode = VT_AUTO;
 	vc->vt_mode.waitv = 0;
@@ -1080,7 +1080,7 @@ void vc_SAK(struct work_struct *work)
 		 */
 		if (tty)
 			__do_SAK(tty);
-		reset_vc(vc, KD_TEXT);
+		reset_vc(vc);
 	}
 	console_unlock();
 }
@@ -1337,7 +1337,7 @@ static void complete_change_console(struct vc_data *vc)
 		 * this outside of VT_PROCESS but there is no single process
 		 * to account for and tracking tty count may be undesirable.
 		 */
-			reset_vc(vc, KD_TEXT);
+			reset_vc(vc);
 
 			if (old_vc_mode != vc->vc_mode) {
 				if (vc->vc_mode == KD_TEXT)
@@ -1409,7 +1409,7 @@ void change_console(struct vc_data *new_vc)
 		 * this outside of VT_PROCESS but there is no single process
 		 * to account for and tracking tty count may be undesirable.
 		 */
-		reset_vc(vc, KD_TEXT);
+		reset_vc(vc);
 
 		/*
 		 * Fall through to normal (VT_AUTO) handling of the switch...

@@ -91,10 +91,6 @@ __secondary_hold_spinloop:
 __secondary_hold_acknowledge:
 	.llong	0x0
 
-	.globl	__run_at_kexec
-__run_at_kexec:
-	.llong	0x0	/* Flag for the secondary kernel from kexec. */
-
 #ifdef CONFIG_RELOCATABLE
 	/* This flag is set to 1 by a loader if the kernel should run
 	 * at the loaded address instead of the linked address.  This
@@ -130,10 +126,6 @@ __secondary_hold:
 	/* Grab our physical cpu number */
 	mr	r24,r3
 	/* stash r4 for book3e */
-#ifdef CONFIG_PPC_FSL_BOOK3E
-	/* we need to setup initial TLB entry. */
-	li	r4,0
-#endif
 	mr	r25,r4
 
 	/* Tell the master cpu we're here */
@@ -186,6 +178,44 @@ exception_marker:
  */
 #ifdef CONFIG_PPC_BOOK3S
 #include "exceptions-64s.S"
+#endif
+
+#ifdef CONFIG_PPC_BOOK3E
+_GLOBAL(fsl_secondary_thread_init)
+	mfspr	r4,SPRN_BUCSR
+
+	/* Enable branch prediction */
+	lis     r3,BUCSR_INIT@h
+	ori     r3,r3,BUCSR_INIT@l
+	mtspr   SPRN_BUCSR,r3
+	isync
+
+	/*
+	 * Fix PIR to match the linear numbering in the device tree.
+	 *
+	 * On e6500, the reset value of PIR uses the low three bits for
+	 * the thread within a core, and the upper bits for the core
+	 * number.  There are two threads per core, so shift everything
+	 * but the low bit right by two bits so that the cpu numbering is
+	 * continuous.
+	 *
+	 * If the old value of BUCSR is non-zero, this thread has run
+	 * before.  Thus, we assume we are coming from kexec or a similar
+	 * scenario, and PIR is already set to the correct value.  This
+	 * is a bit of a hack, but there are limited opportunities for
+	 * getting information into the thread and the alternatives
+	 * seemed like they'd be overkill.  We can't tell just by looking
+	 * at the old PIR value which state it's in, since the same value
+	 * could be valid for one thread out of reset and for a different
+	 * thread in Linux.
+	 */
+
+	mfspr	r3, SPRN_PIR
+	cmpwi	r4,0
+	bne	1f
+	rlwimi	r3, r3, 30, 2, 30
+	mtspr	SPRN_PIR, r3
+1:
 #endif
 
 _GLOBAL(generic_secondary_thread_init)
@@ -428,17 +458,11 @@ __after_prom_start:
 	lis	r25,PAGE_OFFSET@highest	/* compute virtual base of kernel */
 	sldi	r25,r25,32
 #if defined(CONFIG_PPC_BOOK3E)
-	tovirt(r26,r26)			/* on booke, we already run at PAGE_OFFSET */
+	tovirt(r26,r26)		/* on booke, we already run at PAGE_OFFSET */
 #endif
-#if defined(CONFIG_KEXEC) || defined(CONFIG_CRASH_DUMP)
-	/* If relocated we need to restore this flag on that relocated address. */
-	ld	r7,__run_at_kexec-_stext(r26)
-	std	r7,__run_at_kexec-_stext(r26)
-#endif
-
 	lwz	r7,__run_at_load-_stext(r26)
 #if defined(CONFIG_PPC_BOOK3E)
-	tophys(r26,r26)			/* Restore for the remains. */
+	tophys(r26,r26)
 #endif
 	cmplwi	cr0,r7,1	/* flagged to stay where we are ? */
 	bne	1f
@@ -446,11 +470,8 @@ __after_prom_start:
 1:	mr	r3,r25
 	bl	relocate
 #if defined(CONFIG_PPC_BOOK3E)
-	/* In relocatable case we always have to load the address of label 'name'
-	 * to set IVPR. So after .relocate we have to update IVPR with current
-	 * address of label.
-	 */
-	bl	.init_core_book3e
+	/* IVPR needs to be set after relocation. */
+	bl	init_core_book3e
 #endif
 #endif
 
@@ -463,7 +484,7 @@ __after_prom_start:
  */
 	li	r3,0			/* target addr */
 #ifdef CONFIG_PPC_BOOK3E
-	tovirt(r3,r3)			/* on booke, we already run at PAGE_OFFSET */
+	tovirt(r3,r3)		/* on booke, we already run at PAGE_OFFSET */
 #endif
 	mr.	r4,r26			/* In some cases the loader may  */
 #if defined(CONFIG_PPC_BOOK3E)
@@ -480,17 +501,14 @@ __after_prom_start:
  * kernel, otherwise it will be moved to PHYSICAL_START
  */
 #if defined(CONFIG_PPC_BOOK3E)
-	tovirt(r26,r26)			/* on booke, we already run at PAGE_OFFSET */
+	tovirt(r26,r26)		/* on booke, we already run at PAGE_OFFSET */
 #endif
 	lwz	r7,__run_at_load-_stext(r26)
-#if defined(CONFIG_PPC_BOOK3E)
-	tophys(r26,r26)			/* Restore for the remains. */
-#endif
 	cmplwi	cr0,r7,1
 	bne	3f
 
 #ifdef CONFIG_PPC_BOOK3E
-	LOAD_REG_ADDR(r5, interrupt_end_book3e)
+	LOAD_REG_ADDR(r5, __end_interrupts)
 	LOAD_REG_ADDR(r11, _stext)
 	sub	r5,r5,r11
 #else
@@ -515,9 +533,6 @@ __after_prom_start:
 p_end:	.llong	_end - _stext
 
 4:	/* Now copy the rest of the kernel up to _end */
-#if defined(CONFIG_PPC_BOOK3E)
-	tovirt(r26,r26)
-#endif
 	addis	r5,r26,(p_end - _stext)@ha
 	ld	r5,(p_end - _stext)@l(r5)	/* get _end */
 5:	bl	copy_and_flush		/* copy the rest */
@@ -660,7 +675,7 @@ __secondary_start:
 	addi	r14,r14,THREAD_SIZE-STACK_FRAME_OVERHEAD
 	std	r14,PACAKSAVE(r13)
 
-	/* Do early setup for that CPU (stab, slb, hash table pointer) */
+	/* Do early setup for that CPU (SLB and hash table pointer) */
 	bl	early_setup_secondary
 
 	/*
@@ -813,8 +828,10 @@ start_here_multiplatform:
 	li	r0,0
 	stdu	r0,-STACK_FRAME_OVERHEAD(r1)
 
-	/* Do very early kernel initializations, including initial hash table,
-	 * stab and slb setup before we turn on relocation.	*/
+	/*
+	 * Do very early kernel initializations, including initial hash table
+	 * and SLB setup before we turn on relocation.
+	 */
 
 	/* Restore parameters passed from prom_init/kexec */
 	mr	r3,r31
