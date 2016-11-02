@@ -344,6 +344,8 @@ static int cm32181_probe(struct i2c_client *client,
 
 static const struct i2c_device_id cm32181_id[] = {
 	{ "cm32181", 0 },
+	{ "CPLM3218", 0 },
+	{ "CPLM3218:00", 0 },
 	{ }
 };
 
