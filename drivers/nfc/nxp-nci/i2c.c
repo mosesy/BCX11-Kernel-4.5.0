@@ -397,6 +397,8 @@ static int nxp_nci_i2c_remove(struct i2c_client *client)
 
 static struct i2c_device_id nxp_nci_i2c_id_table[] = {
 	{"nxp-nci_i2c", 0},
+	{"NXP1002", 0 },
+	{"NXP1002:00", 0 },
 	{}
 };
 MODULE_DEVICE_TABLE(i2c, nxp_nci_i2c_id_table);
@@ -410,6 +412,7 @@ MODULE_DEVICE_TABLE(of, of_nxp_nci_i2c_match);
 #ifdef CONFIG_ACPI
 static struct acpi_device_id acpi_id[] = {
 	{ "NXP7471" },
+	{ "NXP1002" },
 	{ },
 };
 MODULE_DEVICE_TABLE(acpi, acpi_id);
