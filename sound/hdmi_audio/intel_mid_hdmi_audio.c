@@ -1914,6 +1914,8 @@ static int hdmi_audio_probe(struct platform_device *devptr)
 	}
 
 	intelhaddata->hw_silence = 1;
+	/* PIPE B is used for HDMI*/
+	intelhaddata->audio_reg_base = 0x65800;
 	intelhaddata->ops = &had_ops_v2;
 
 	return retval;

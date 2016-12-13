@@ -386,19 +386,6 @@ int had_process_hot_plug(struct snd_intelhad *intelhaddata)
 
 	pr_debug("Processing HOT_PLUG, buf_id = %d\n", buf_id);
 
-	 /* Query display driver for audio register base */
-	if (intelhaddata->reg_ops.hdmi_audio_get_register_base
-		(&intelhaddata->audio_reg_base)) {
-			pr_err("Unable to get audio reg base from Display driver\n");
-			goto err;
-	}
-	if(intelhaddata->audio_reg_base == 0){
-		pr_err("audio reg base value is NULL\n");
-		goto err;
-	}
-
-	pr_debug("%s audio_reg_base = %x\n",__func__, intelhaddata->audio_reg_base);
-
 	/* Safety check */
 	if (substream) {
 		pr_debug("There should not be active PB from ALSA\n");
