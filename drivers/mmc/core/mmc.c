@@ -579,7 +579,7 @@ static int mmc_decode_ext_csd(struct mmc_card *card, u8 *ext_csd)
 	}
 
 	/* eMMC v5 or later */
-	if (card->ext_csd.rev >= 7) {
+	if (card->ext_csd.rev >= 8) {
 		memcpy(card->ext_csd.fwrev, &ext_csd[EXT_CSD_FIRMWARE_VERSION],
 		       MMC_FIRMWARE_LEN);
 		card->ext_csd.ffu_capable =
