@@ -19,7 +19,6 @@
 #include <linux/io.h>
 
 #include <linux/mmc/host.h>
-#include <linux/pm_qos.h>
 
 /*
  * Controller registers
@@ -434,12 +433,6 @@ struct sdhci_host {
 	struct mmc_host_ops mmc_host_ops;	/* MMC host ops */
 	u64 dma_mask;		/* custom DMA mask */
 
-	struct pm_qos_request pm_qos_req;
-	int dma_latency;
-	int lat_cancel_delay;
-	int consecutive_req;
-	bool pm_qos_set;
-
 #if defined(CONFIG_LEDS_CLASS) || defined(CONFIG_LEDS_CLASS_MODULE)
 	struct led_classdev led;	/* LED control */
 	char led_name[32];
@@ -536,6 +529,8 @@ struct sdhci_ops {
 #endif
 
 	void	(*set_clock)(struct sdhci_host *host, unsigned int clock);
+	void	(*set_power)(struct sdhci_host *host, unsigned char mode,
+			     unsigned short vdd);
 
 	int		(*enable_dma)(struct sdhci_host *host);
 	unsigned int	(*get_max_clock)(struct sdhci_host *host);
@@ -667,6 +662,8 @@ static inline bool sdhci_sdio_irq_enabled(struct sdhci_host *host)
 }
 
 void sdhci_set_clock(struct sdhci_host *host, unsigned int clock);
+void sdhci_set_power(struct sdhci_host *host, unsigned char mode,
+		     unsigned short vdd);
 void sdhci_set_bus_width(struct sdhci_host *host, int width);
 void sdhci_reset(struct sdhci_host *host, u8 mask);
 void sdhci_set_uhs_signaling(struct sdhci_host *host, unsigned timing);
