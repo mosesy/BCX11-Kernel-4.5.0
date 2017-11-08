@@ -24,7 +24,7 @@
  * is defined in section 2.8.7.2 of "Windows ACPI Design Guide for SoC
  * Platforms"
  */
-#define MAX_NBUTTONS	5
+#define MAX_NBUTTONS	6
 
 struct soc_button_info {
 	const char *name;
@@ -194,10 +194,11 @@ static int soc_button_probe(struct platform_device *pdev)
 
 static struct soc_button_info soc_button_PNP0C40[] = {
 	{ "power", 0, EV_KEY, KEY_POWER, false, true },
-	{ "home", 1, EV_KEY, KEY_LEFTMETA, false, true },
-	{ "volume_up", 2, EV_KEY, KEY_VOLUMEUP, true, false },
-	{ "volume_down", 3, EV_KEY, KEY_VOLUMEDOWN, true, false },
-	{ "rotation_lock", 4, EV_SW, SW_ROTATE_LOCK, false, false },
+	{ "volume_up", 1, EV_KEY, KEY_VOLUMEUP, true, false },
+	{ "volume_down", 2, EV_KEY, KEY_VOLUMEDOWN, true, false },
+	{ "rotation_lock", 3, EV_SW, SW_ROTATE_LOCK, false, false },
+	{ "bright_up", 4, EV_KEY, KEY_BRIGHTNESSUP, true, false },
+	{ "bright_down", 5, EV_KEY, KEY_BRIGHTNESSDOWN, true, false },
 	{ }
 };
 
