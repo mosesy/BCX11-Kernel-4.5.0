@@ -373,6 +373,17 @@ config TOUCHSCREEN_IPROC
 	  To compile this driver as a module, choose M here: the
 	  module will be called bcm_iproc_tsc.
 
+config TOUCHSCREEN_DPT_FT5X26
+	tristate "DPT FocalTech FT5x26 I2C Touchscreen support"
+	depends on I2C
+	default y
+	help
+	  Say Y here if you have an DPT touchscreen based
+	  on the FocalTech FT5x26 family of controllers connected to
+	  your system.
+
+	  If unsure, say N.
+
 config TOUCHSCREEN_S3C2410
 	tristate "Samsung S3C2410/generic touchscreen input driver"
 	depends on ARCH_S3C24XX || SAMSUNG_DEV_TS
