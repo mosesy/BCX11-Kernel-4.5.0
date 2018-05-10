@@ -94,3 +94,4 @@ obj-$(CONFIG_TOUCHSCREEN_ZFORCE)	+= zforce_ts.o
 obj-$(CONFIG_TOUCHSCREEN_COLIBRI_VF50)	+= colibri-vf50-ts.o
 obj-$(CONFIG_TOUCHSCREEN_ROHM_BU21023)	+= rohm_bu21023.o
 obj-$(CONFIG_TOUCHSCREEN_DPT_FT5X26) += focaltech_core.o
+obj-$(CONFIG_TOUCHSCREEN_EGALAX_EXC31XX) += egalax_i2c.o

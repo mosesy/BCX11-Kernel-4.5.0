@@ -630,6 +630,16 @@ config TOUCHSCREEN_EDT_FT5X06
 	  To compile this driver as a module, choose M here: the
 	  module will be called edt-ft5x06.
 
+config TOUCHSCREEN_EGALAX_EXC31XX
+	tristate "EETI eGalax EXC31XX multi-touch panel support"
+	depends on I2C
+	help
+	  Say Y here to enable support for I2C connected EETI
+	  eGalax EXC31XX multi-touch panels.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called egalax_i2c.
+
 config TOUCHSCREEN_MIGOR
 	tristate "Renesas MIGO-R touchscreen"
 	depends on SH_MIGOR && I2C

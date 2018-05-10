@@ -333,8 +333,9 @@ static const struct sdhci_acpi_slot sdhci_acpi_slot_int_sd = {
 		   SDHCI_ACPI_RUNTIME_PM,
 	.quirks  = SDHCI_QUIRK_NO_ENDATTR_IN_NOPDESC,
 	.quirks2 = SDHCI_QUIRK2_CARD_ON_NEEDS_BUS_ON |
-		   SDHCI_QUIRK2_STOP_WITH_TC,
-	.caps    = MMC_CAP_WAIT_WHILE_BUSY,
+		   SDHCI_QUIRK2_STOP_WITH_TC | SDHCI_QUIRK2_NO_1_8_V,
+	.caps	= MMC_CAP_WAIT_WHILE_BUSY,
+	.caps2	= MMC_CAP2_NO_WRITE_PROTECT,
 	.probe_slot	= sdhci_acpi_sd_probe_slot,
 };
 
